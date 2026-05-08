@@ -9,6 +9,7 @@
         :root {
             --bg: #0d1117; --side: #161b22; --border: #30363d;
             --accent: #58a6ff; --text: #c9d1d9; --bright: #f0f6fc; --danger: #f85149;
+            --success: #238636;
         }
         * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
@@ -20,22 +21,35 @@
 
         .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); }
         
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; }
-        .btn:hover { background: #30363d; border-color: #8b949e; }
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.15s ease; }
+        .btn:hover { background: #30363d; border-color: #8b949e; transform: translateY(-1px); }
         .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
+        .btn.primary:hover { background: #2ea043; }
+        .btn.danger { background: #f85149; border-color: rgba(240,246,252,0.1); }
+        .btn.danger:hover { background: #da3633; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; transition: border-color 0.15s ease; }
+        input:focus, select:focus { outline: none; border-color: var(--accent); }
         label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; }
 
-        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; cursor: pointer; border-left: 4px solid transparent; }
-        .move-card.active { border-left-color: var(--accent); background: #1c2128; }
+        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; cursor: pointer; border-left: 4px solid transparent; transition: all 0.15s ease; }
+        .move-card:hover { background: #1c2128; border-color: #404854; }
+        .move-card.active { border-left-color: var(--accent); background: #1c2128; box-shadow: 0 0 8px rgba(88,166,255,0.2); }
         
-        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; transition: all 0.1s ease; }
+        .block-row:hover { border-color: #8b949e; background: #161b22; }
         
         #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; max-height: 150px; overflow-y: auto; display: none; margin-bottom: 10px; }
-        .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); }
+        .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); transition: background 0.1s ease; }
+        .res-item:hover { background: #161b22; }
 
         .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
+
+        .empty-state { text-align: center; color: #484f58; padding: 40px 20px; }
+        .empty-state-icon { font-size: 2em; margin-bottom: 10px; }
+
+        .action-row { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
 
         @media (max-width: 900px) {
             body { flex-direction: column; overflow-y: auto; }
@@ -49,13 +63,13 @@
 <div class="sidebar">
     <div class="header">
         <span style="font-weight:900; color:var(--accent);">ULTRA V3.5</span>
-        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff;">ZSTD: LOADING</div>
+        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression library status">ZSTD: LOADING</div>
     </div>
     <div style="padding:15px; overflow-y:auto;">
         <label>Roblox Asset Lookup</label>
         <div style="display:flex; gap:5px; margin-bottom:10px;">
-            <input id="searchIn" placeholder="Find ID..." style="margin:0;">
-            <button onclick="searchRoblox()" class="btn primary">GO</button>
+            <input id="searchIn" placeholder="Find ID..." style="margin:0;" onkeypress="if(event.key==='Enter') searchRoblox()">
+            <button onclick="searchRoblox()" class="btn primary" title="Press Enter or click GO">GO</button>
         </div>
         <div id="searchRes"></div>
 
@@ -74,11 +88,12 @@
 </div>
 
 <div class="canvas">
-    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">Workspace</h3>
-        <div style="display:flex; gap:8px;">
-            <button class="btn" onclick="importZ()">Import</button>
-            <button class="btn primary" onclick="exportZ()">Export Zstd</button>
+        <div class="action-row">
+            <button class="btn" onclick="importZ()" title="Load from Zstd string">Import</button>
+            <button class="btn primary" onclick="exportZ()" title="Export as Zstd string" id="exportBtn">Export Zstd</button>
+            <button class="btn danger" onclick="clearWorkspace()" title="Delete all moves" id="clearBtn">Clear All</button>
         </div>
     </div>
     <div id="ws"></div>
@@ -93,9 +108,12 @@
 
 <script>
     window.zstdEngine = null;
+    window.zstdLoadTimeout = null;
     let moves = [];
     let selM = null;
     let selB = null;
+    const SAVE_INTERVAL = 30000; // 30 seconds
+    const ZSTD_LOAD_TIMEOUT = 8000; // 8 seconds
 
     // THE FULL ARSENAL
     const library = {
@@ -125,17 +143,55 @@
         }
     };
 
+    function escapeHtml(str) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(str).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    function updateZstdStatus() {
+        const stat = document.getElementById('z-status');
+        if (window.zstdEngine) {
+            stat.innerText = "ZSTD READY";
+            stat.style.background = "#238636";
+        } else {
+            stat.innerText = "ZSTD FAILED";
+            stat.style.background = "#da3633";
+        }
+    }
+
     window.onload = () => {
-        // Load the REAL Zstd Engine
+        // Load from localStorage if available
+        const saved = localStorage.getItem('movesetData');
+        if (saved) {
+            try {
+                moves = JSON.parse(saved);
+                if (moves.length > 0) {
+                    selectM(0);
+                }
+            } catch (e) {
+                console.error("Failed to load saved data:", e);
+            }
+        }
+
+        // Load the REAL Zstd Engine with timeout
         if (typeof hpccWasm !== 'undefined') {
+            window.zstdLoadTimeout = setTimeout(() => {
+                if (!window.zstdEngine) {
+                    updateZstdStatus();
+                }
+            }, ZSTD_LOAD_TIMEOUT);
+
             hpccWasm.Zstd.load().then(zstd => {
+                clearTimeout(window.zstdLoadTimeout);
                 window.zstdEngine = zstd;
-                const stat = document.getElementById('z-status');
-                stat.innerText = "ZSTD READY";
-                stat.style.background = "#238636";
+                updateZstdStatus();
             }).catch(err => {
-                document.getElementById('z-status').innerText = "WASM BLOCKED";
+                clearTimeout(window.zstdLoadTimeout);
+                console.error("Zstd load error:", err);
+                updateZstdStatus();
             });
+        } else {
+            updateZstdStatus();
         }
 
         // Build Palette
@@ -151,12 +207,47 @@
             }
             pal.appendChild(g);
         }
-        addM('SKILL');
+
+        if (moves.length === 0) {
+            addM('SKILL');
+        }
+
+        // Auto-save every 30 seconds
+        setInterval(() => {
+            try {
+                localStorage.setItem('movesetData', JSON.stringify(moves));
+            } catch (e) {
+                console.error("Failed to save data:", e);
+            }
+        }, SAVE_INTERVAL);
     };
 
     function addM(t) {
         moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false }, Req: [], Branch: {} } });
         selectM(moves.length - 1);
+    }
+
+    function deleteMove(i) {
+        if (moves.length <= 1) {
+            alert("Cannot delete the last move!");
+            return;
+        }
+        moves.splice(i, 1);
+        if (selM === i) {
+            selM = Math.max(0, i - 1);
+        } else if (selM > i) {
+            selM--;
+        }
+        render();
+    }
+
+    function clearWorkspace() {
+        if (confirm("Are you sure? This will delete ALL moves!")) {
+            moves = [];
+            selM = null;
+            selB = null;
+            addM('SKILL');
+        }
     }
 
     function selectM(i) { selM = i; selB = null; render(); }
@@ -169,17 +260,32 @@
 
     function render() {
         const ws = document.getElementById('ws');
+        
+        if (moves.length === 0) {
+            ws.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><p>No moves yet. Create one to get started!</p></div>`;
+            document.getElementById('exportBtn').disabled = true;
+            document.getElementById('clearBtn').disabled = true;
+            renderInspector();
+            return;
+        }
+
+        document.getElementById('exportBtn').disabled = false;
+        document.getElementById('clearBtn').disabled = false;
+
         ws.innerHTML = moves.map((m, i) => `
             <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:var(--accent); font-size:15px;">${m.NAME}</strong>
-                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME}</span>
+                    <div style="flex:1;">
+                        <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME)}</strong>
+                        <span style="font-size:10px; opacity:0.6; margin-left:10px;">${escapeHtml(m.K_NAME)}</span>
+                    </div>
+                    <span style="color:var(--danger); cursor:pointer; font-size:14px; padding:0 8px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕</span>
                 </div>
                 <div>
                     ${m.DATA.Line.map((b, bi) => `
                         <div class="block-row" onclick="event.stopPropagation(); selM=${i}; selB=${bi}; renderInspector();">
-                            <span>${b.K_NAME}</span>
-                            <span style="color:var(--danger); cursor:pointer;" onclick="moves[${i}].DATA.Line.splice(${bi},1); render();">✕</span>
+                            <span>${escapeHtml(b.K_NAME)}</span>
+                            <span style="color:var(--danger); cursor:pointer;" onclick="event.stopPropagation(); moves[${i}].DATA.Line.splice(${bi},1); render();" title="Delete block">✕</span>
                         </div>
                     `).join('')}
                 </div>
@@ -195,20 +301,20 @@
 
         if (selB !== null) {
             const b = m.DATA.Line[selB];
-            let h = `<h3 style="margin:0 0 15px 0; color:var(--accent);">${b.K_NAME}</h3>`;
+            let h = `<h3 style="margin:0 0 15px 0; color:var(--accent);">${escapeHtml(b.K_NAME)}</h3>`;
             for(let k in b) {
                 if(k === 'K_NAME') continue;
-                h += `<label>${k.replace(/_/g, ' ')}</label>`;
+                h += `<label>${escapeHtml(k.replace(/_/g, ' '))}</label>`;
                 if(typeof b[k] === 'boolean') {
                     h += `<select onchange="upd('${k}', this.value === 'true')"><option value="true" ${b[k]?'selected':''}>True</option><option value="false" ${!b[k]?'selected':''}>False</option></select>`;
                 } else {
-                    h += `<input value="${b[k]}" oninput="upd('${k}', this.value)">`;
+                    h += `<input value="${escapeHtml(b[k])}" oninput="upd('${k}', this.value)">`;
                 }
             }
             ins.innerHTML = h;
         } else {
             ins.innerHTML = `
-                <label>Move Name</label><input value="${m.NAME}" oninput="moves[selM].NAME=this.value; render()">
+                <label>Move Name</label><input value="${escapeHtml(m.NAME)}" oninput="moves[selM].NAME=this.value; render()">
                 <label>Move Type (K_NAME)</label>
                 <select onchange="moves[selM].K_NAME=this.value; render()">
                     <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
@@ -236,31 +342,44 @@
 
     async function searchRoblox() {
         const q = document.getElementById('searchIn').value;
+        if (!q.trim()) {
+            alert("Please enter a search term!");
+            return;
+        }
         const box = document.getElementById('searchRes');
         box.style.display = 'block'; box.innerHTML = "<div style='padding:10px;'>Searching RoProxy...</div>";
         try {
-            // Using RoProxy, a dedicated API proxy for Roblox that bypasses the AllOrigins throttle
             const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
             const json = await res.json();
             if (json.data && json.data.length > 0) {
-                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: '+${i.id})">${i.name} (${i.id})</div>`).join('');
+                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); this.innerText='✓ Copied!'; setTimeout(()=>searchRoblox(), 1000);">${escapeHtml(i.name)} (${i.id})</div>`).join('');
             } else {
                 box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
             }
         } catch(e) { 
-            // Fallback to CodeTabs proxy if RoProxy fails
             try {
                 const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=https://catalog.roblox.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
                 const json = await res.json();
-                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: '+${i.id})">${i.name} (${i.id})</div>`).join('');
+                if (json.data && json.data.length > 0) {
+                    box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); this.innerText='✓ Copied!'; setTimeout(()=>searchRoblox(), 1000);">${escapeHtml(i.name)} (${i.id})</div>`).join('');
+                } else {
+                    box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
+                }
             } catch(err) {
-                box.innerHTML = "<div style='padding:10px; color:var(--danger);'>Network Blocked. Try Manual ID.</div>"; 
+                box.innerHTML = "<div style='padding:10px; color:var(--danger);'>Network error. Try again or enter ID manually.</div>"; 
             }
         }
     }
 
     function exportZ() {
-        if(!window.zstdEngine) return alert("Zstd library failed to load. Check your internet connection.");
+        if(!window.zstdEngine) {
+            alert("Zstd library is not ready yet. Please wait a moment...");
+            return;
+        }
+        if (moves.length === 0) {
+            alert("Nothing to export!");
+            return;
+        }
         const raw = JSON.stringify(moves.map(m => ({ ...m, DATA: JSON.stringify(m.DATA) })));
         try {
             const uint8 = new TextEncoder().encode(raw);
@@ -269,19 +388,25 @@
             const t = document.createElement('textarea');
             t.value = b64; document.body.appendChild(t); t.select();
             document.execCommand('copy'); document.body.removeChild(t);
-            alert("SUCCESS! Real Zstd String Copied.");
+            alert("✓ Zstd string copied to clipboard!");
         } catch(e) { alert("Export Error: " + e.message); }
     }
 
     function importZ() {
-        const s = prompt("Paste Zstd Data:");
-        if(!s || !window.zstdEngine) return;
+        const s = prompt("Paste your Zstd data string:");
+        if(!s) return;
+        if(!window.zstdEngine) {
+            alert("Zstd library is not ready yet. Please wait...");
+            return;
+        }
         try {
             const bin = Uint8Array.from(atob(s), c => c.charCodeAt(0));
             const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bin));
-            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
-            render();
-        } catch(e) { alert("Import Failed. Are you sure this is a valid Zstd string?"); }
+            const imported = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
+            moves = imported;
+            selectM(0);
+            alert("✓ Import successful!");
+        } catch(e) { alert("Import Failed: " + e.message + "\n\nMake sure you pasted a valid Zstd string."); }
     }
 </script>
 </body>
