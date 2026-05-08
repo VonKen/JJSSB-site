@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Moveset Builder Ultra V3.5</title>
-    <script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2.48.0/dist/index.min.js"></script>
     <style>
         :root {
             --bg: #0d1117; --side: #161b22; --border: #30363d;
@@ -148,7 +148,8 @@
 
     function loadZstdEngine() {
         if (typeof hpccWasm === 'undefined') {
-            updateZstdStatus("WASM UNAVAILABLE", false);
+            console.warn("hpccWasm not loaded, retrying with alternative approach...");
+            setTimeout(loadZstdEngine, 500);
             return;
         }
 
@@ -158,17 +159,28 @@
             }
         }, 8000);
 
-        hpccWasm.Zstd.load()
-            .then(zstd => {
+        try {
+            if (hpccWasm.Zstd && typeof hpccWasm.Zstd.load === 'function') {
+                hpccWasm.Zstd.load()
+                    .then(zstd => {
+                        clearTimeout(timeoutId);
+                        window.zstdEngine = zstd;
+                        updateZstdStatus("ZSTD READY", true);
+                    })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        console.error("Zstd load error:", err);
+                        updateZstdStatus("ZSTD FAILED", false);
+                    });
+            } else {
                 clearTimeout(timeoutId);
-                window.zstdEngine = zstd;
-                updateZstdStatus("ZSTD READY", true);
-            })
-            .catch(err => {
-                clearTimeout(timeoutId);
-                console.error("Zstd load error:", err);
                 updateZstdStatus("ZSTD FAILED", false);
-            });
+            }
+        } catch (err) {
+            clearTimeout(timeoutId);
+            console.error("Zstd initialization error:", err);
+            updateZstdStatus("ZSTD FAILED", false);
+        }
     }
 
     function updateZstdStatus(text, isReady) {
