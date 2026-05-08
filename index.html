@@ -4,7 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Moveset Builder Ultra V3.5</title>
-    <script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2.48.0/dist/index.min.js"></script>
+    <script type="module">
+        // ── Omni-style zstd-js bootstrap ────────────────────────────────────
+        // Mirrors @oneidentity/zstd-js usage from Omni's ZstdTab.tsx
+        import { ZstdSimple, ZstdStream } from 'https://esm.sh/@oneidentity/zstd-js@1.0.3';
+
+        // Omni's bytesToBase64 / base64ToBytes helpers (utils.ts)
+        function bytesToBase64(bytes) {
+            const binString = Array.from(bytes, x => String.fromCodePoint(x)).join('');
+            return btoa(binString);
+        }
+        function base64ToBytes(base64) {
+            const binString = atob(base64);
+            return Uint8Array.from(binString, m => m.codePointAt(0));
+        }
+
+        // Expose to global scope for the rest of the page script
+        window._zstdSimple  = ZstdSimple;
+        window._zstdStream  = ZstdStream;
+        window._bytesToBase64 = bytesToBase64;
+        window._base64ToBytes = base64ToBytes;
+        window._zstdReady   = true;
+        updateZstdStatus('ZSTD READY', true);
+    </script>
     <style>
         :root {
             --bg: #0d1117; --side: #161b22; --border: #30363d;
@@ -35,6 +57,339 @@
         .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; transition: all 0.15s; }
         .block-row:hover { border-color: #484f58; background: #161b22; }
         
+        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; max-height: 150px; overflow-y: auto; display: none; margin-bottom: 10px; }
+        .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); transition: all 0.15s; }
+        .res-item:hover { background: #1c2128; }
+
+        .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; overflow-y: auto; }
+            .sidebar, .inspector { width: 100%; height: auto; border: none; }
+            .canvas { min-height: 450px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="header">
+        <span style="font-weight:900; color:var(--accent);">ULTRA V3.5</span>
+        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression via @oneidentity/zstd-js (Omni)">ZSTD: LOADING</div>
+    </div>
+    <div style="padding:15px; overflow-y:auto;">
+        <label>Roblox Asset Lookup</label>
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+            <input id="searchIn" placeholder="Find ID..." style="margin:0;" onkeypress="if(event.key==='Enter') searchRoblox()">
+            <button onclick="searchRoblox()" class="btn primary" title="Search Roblox catalog">GO</button>
+        </div>
+        <div id="searchRes"></div>
+
+        <label>Add New Move</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+            <button onclick="addM('SKILL')" class="btn" title="Create new SKILL move">SKILL</button>
+            <button onclick="addM('MELEE')" class="btn" title="Create new MELEE move">MELEE</button>
+            <button onclick="addM('CHASE')" class="btn" title="Create new CHASE move">CHASE</button>
+            <button onclick="addM('ULTIMATE')" class="btn" title="Create new ULTIMATE move">ULTIMATE</button>
+            <button onclick="addM('SPECIAL')" class="btn" title="Create new SPECIAL move">SPECIAL</button>
+            <button onclick="addM('AWK')" class="btn" title="Create new AWK move">AWK</button>
+        </div>
+
+        <div id="palette"></div>
+    </div>
+</div>
+
+<div class="canvas">
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+        <h3 style="margin:0;">Workspace</h3>
+        <div style="display:flex; gap:8px;">
+            <button class="btn" onclick="importZ()" title="Import compressed Zstd data">Import</button>
+            <button class="btn primary" onclick="exportZ()" id="export-btn" title="Export workspace as Zstd">Export Zstd</button>
+            <button class="btn" onclick="clearWS()" title="Clear all moves (cannot undo)">Clear</button>
+        </div>
+    </div>
+    <div id="ws"></div>
+</div>
+
+<div class="inspector">
+    <label>Properties</label>
+    <div id="ins-content">
+        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a block</p>
+    </div>
+</div>
+
+<script>
+    // zstd state — populated by the ES module block above
+    window._zstdReady   = false;
+    window._zstdSimple  = null;
+    window._zstdStream  = null;
+    window._bytesToBase64 = null;
+    window._base64ToBytes = null;
+    let moves = [];
+    let selM = null;
+    let selB = null;
+
+    // THE FULL ARSENAL
+    const library = {
+        "Combat": {
+            HITBOX: { SIZE: "6,6,6", DAMAGE: 10, STUN: 0.5, BLOCKABLE: true, POSITION: "0,0,3", HIT_RAGDOLL: false, ATTACK_TYPE: "Melee", CAN_KILL: true },
+            COUNTER: { TIME: 0.5, BRANCH: "Hit", ATTACK_TYPE2: "Melee", REMOVE_ON_HIT: true },
+            GRAB: { TIME: 1, BODY_PART: "Torso", BODY_PART2: "Head", POSITION: "0,0,0.5", ROTATION: "0,0,90" },
+            ULTGIB: { AMOUNT: 20 },
+            HPGIB: { AMOUNT: -15 }
+        },
+        "Logic": {
+            WAIT: { TIME: 0.1 },
+            TAG: { TAG: "user", VALUE: "1", CHECK: false, SET: true },
+            BRANCH: { BRANCH: "1" },
+            STATE: { STATE: "IFrame", TIME: 1, CANCEL_ON_END: true, VALUE: 1 },
+            LOOP: { LOOP_BACK: 1, LOOP_AMOUNT: 5, HOLD: false },
+            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: true }
+        },
+        "Visual/Audio": {
+            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.1, LOOPED: false },
+            SFX: { ID: "0", VOLUME: 1, START: 0, SPEED: 1, GLOBAL: false, PARENT: "HumanoidRootPart" },
+            VISUAL: { EFFECT: "Glow", COLOR: "255,255,255", TIME: 0.5, POSITION: "0,0,0", SIZE: 1, EASING_STYLE: "Linear", OPACITY: 0, ALT_SIZE: 1, BODY_PART: "HumanoidRootPart" }
+        },
+        "Motion": {
+            VELO: { FORCE: "0,0,50", TIME: 0.2, FADE: true, TRACK: true, RAGDOLL: 0 },
+            CHASE: { TARGET: "Enemy", SPEED: 50, TIME: 0.5 }
+        }
+    };
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    window.onload = () => {
+        loadAutoSave();
+        buildPalette();
+        if(moves.length === 0) addM('SKILL');
+        
+        // Auto-save to localStorage every 30 seconds
+        setInterval(autoSave, 30000);
+    };
+
+    function updateZstdStatus(text, isReady) {
+        const stat = document.getElementById('z-status');
+        stat.innerText = text;
+        stat.style.background = isReady ? "#238636" : "#da3633";
+    }
+
+    function buildPalette() {
+        const pal = document.getElementById('palette');
+        for(let cat in library) {
+            let l = document.createElement('div'); l.className = 'cat-label'; l.innerText = cat;
+            pal.appendChild(l);
+            let g = document.createElement('div'); g.style = 'display:grid; grid-template-columns: 1fr 1fr; gap:5px;';
+            for(let b in library[cat]) {
+                let btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = b;
+                btn.onclick = () => addBlock(b, library[cat][b]);
+                g.appendChild(btn);
+            }
+            pal.appendChild(g);
+        }
+    }
+
+    function addM(t) {
+        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false }, Req: [], Branch: {} } });
+        selectM(moves.length - 1);
+    }
+
+    function selectM(i) { selM = i; selB = null; render(); }
+
+    function addBlock(key, data) {
+        if(selM === null) return;
+        moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
+        render();
+    }
+
+    function deleteMove(i) {
+        if(confirm("Delete this move?")) {
+            moves.splice(i, 1);
+            selM = null;
+            selB = null;
+            render();
+        }
+    }
+
+    function clearWS() {
+        if(confirm("Clear entire workspace? Cannot undo.")) {
+            moves = [];
+            selM = null;
+            selB = null;
+            render();
+        }
+    }
+
+    function render() {
+        const ws = document.getElementById('ws');
+        if(moves.length === 0) {
+            ws.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:20px;">No moves yet. Add one from the sidebar.</p>';
+            renderInspector();
+            return;
+        }
+        
+        ws.innerHTML = moves.map((m, i) => `
+            <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME)}</strong>
+                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME}</span>
+                </div>
+                <div style="display:flex; gap:5px; margin-top:8px;">
+                    <span style="font-size:9px; color:#8b949e; flex:1;">${m.DATA.Line.length} block(s)</span>
+                    <span style="color:var(--danger); cursor:pointer; font-size:11px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕ Delete</span>
+                </div>
+                <div>
+                    ${m.DATA.Line.map((b, bi) => `
+                        <div class="block-row" onclick="event.stopPropagation(); selM=${i}; selB=${bi}; renderInspector();">
+                            <span>${escapeHtml(b.K_NAME)}</span>
+                            <span style="color:var(--danger); cursor:pointer;" onclick="event.stopPropagation(); moves[${i}].DATA.Line.splice(${bi},1); render();" title="Delete block">✕</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+        renderInspector();
+    }
+
+    function renderInspector() {
+        const ins = document.getElementById('ins-content');
+        if (selM === null) {
+            ins.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:40px;">Select a move or block</p>';
+            return;
+        }
+        const m = moves[selM];
+
+        if (selB !== null) {
+            const b = m.DATA.Line[selB];
+            let h = `<h3 style="margin:0 0 15px 0; color:var(--accent);">${escapeHtml(b.K_NAME)}</h3>`;
+            for(let k in b) {
+                if(k === 'K_NAME') continue;
+                h += `<label>${k.replace(/_/g, ' ')}</label>`;
+                if(typeof b[k] === 'boolean') {
+                    h += `<select onchange="upd('${k}', this.value === 'true')"><option value="true" ${b[k]?'selected':''}>True</option><option value="false" ${!b[k]?'selected':''}>False</option></select>`;
+                } else {
+                    h += `<input value="${escapeHtml(String(b[k]))}" oninput="upd('${k}', this.value)">`;
+                }
+            }
+            ins.innerHTML = h;
+        } else {
+            ins.innerHTML = `
+                <label>Move Name</label><input value="${escapeHtml(m.NAME)}" oninput="moves[selM].NAME=this.value; render()">
+                <label>Move Type (K_NAME)</label>
+                <select onchange="moves[selM].K_NAME=this.value; render()">
+                    <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
+                    <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
+                    <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
+                    <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
+                    <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
+                    <option ${m.K_NAME=='AWK'?'selected':''}>AWK</option>
+                </select>
+                <label>Cooldown</label><input type="number" value="${m.COOLDOWN}" oninput="moves[selM].COOLDOWN=Number(this.value)">
+                <label>Input Key (ID)</label><input type="number" value="${m.KEY}" oninput="moves[selM].KEY=Number(this.value)">
+                <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+                <label>Prop: USE</label><select onchange="moves[selM].DATA.Prop.USE=(this.value==='true')"><option value="true" ${m.DATA.Prop.USE?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.USE?'selected':''}>False</option></select>
+                <label>Prop: AWK</label><select onchange="moves[selM].DATA.Prop.AWK=(this.value==='true')"><option value="true" ${m.DATA.Prop.AWK?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.AWK?'selected':''}>False</option></select>
+                <label>Prop: NOCANCEL</label><select onchange="moves[selM].DATA.Prop.NOCANCEL=(this.value==='true')"><option value="true" ${m.DATA.Prop.NOCANCEL?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.NOCANCEL?'selected':''}>False</option></select>
+            `;
+        }
+    }
+
+    function upd(k, v) {
+        let val = v;
+        if(!isNaN(v) && v.trim() !== "" && typeof v !== 'boolean') val = Number(v);
+        moves[selM].DATA.Line[selB][k] = val;
+    }
+
+    async function searchRoblox() {
+        const q = document.getElementById('searchIn').value.trim();
+        if(!q) return;
+        
+        const box = document.getElementById('searchRes');
+        box.style.display = 'block'; 
+        box.innerHTML = "<div style='padding:10px; color:var(--accent);'>Searching...</div>";
+        
+        try {
+            const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+            const json = await res.json();
+            if (json.data && json.data.length > 0) {
+                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: ${i.id}')" title="Click to copy ID">${escapeHtml(i.name)} (${i.id})</div>`).join('');
+            } else {
+                box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
+            }
+        } catch(e) { 
+            try {
+                const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=https://catalog.roblox.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+                const json = await res.json();
+                if(json.data && json.data.length > 0) {
+                    box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: ${i.id}')" title="Click to copy ID">${escapeHtml(i.name)} (${i.id})</div>`).join('');
+                } else {
+                    box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
+                }
+            } catch(err) {
+                box.innerHTML = "<div style='padding:10px; color:var(--danger);'>Network blocked. Try manual ID entry.</div>"; 
+            }
+        }
+    }
+
+    function autoSave() {
+        try {
+            localStorage.setItem('moveset_autosave', JSON.stringify(moves));
+        } catch(e) {
+            console.warn("AutoSave failed:", e);
+        }
+    }
+
+    function loadAutoSave() {
+        try {
+            const saved = localStorage.getItem('moveset_autosave');
+            if(saved) {
+                moves = JSON.parse(saved);
+            }
+        } catch(e) {
+            console.warn("AutoLoad failed:", e);
+        }
+    }
+
+    // ── Omni-style compress (mirrors ZstdTab.tsx compress()) ─────────────
+    function exportZ() {
+        if (!window._zstdReady) {
+            alert("Zstd not ready yet. Please wait a moment.");
+            return;
+        }
+        try {
+            const raw = JSON.stringify(moves.map(m => ({ ...m, DATA: JSON.stringify(m.DATA) })));
+            // Use ZstdSimple (no streaming needed for payload this size)
+            const compressed = window._zstdSimple.compress(new TextEncoder().encode(raw));
+            const b64 = window._bytesToBase64(compressed);
+            const t = document.createElement('textarea');
+            t.value = b64; document.body.appendChild(t); t.select();
+            document.execCommand('copy'); document.body.removeChild(t);
+            alert("✓ Zstd string copied to clipboard!");
+        } catch(e) { alert("Export Error: " + e.message); }
+    }
+
+    // ── Omni-style decompress (mirrors ZstdTab.tsx decompress()) ─────────
+    function importZ() {
+        const s = prompt("Paste your Zstd data:");
+        if (!s || !window._zstdReady) return;
+        try {
+            const bytes      = window._base64ToBytes(s);
+            const decompressed = window._zstdSimple.decompress(bytes);
+            const decoded    = new TextDecoder().decode(decompressed);
+            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
+            selM = null;
+            selB = null;
+            render();
+            alert("✓ Moveset imported successfully!");
+        } catch(e) { alert("Import failed. Check that the Zstd string is valid.\n" + e.message); }
+    }
+</script>
+</body>
+</html>        
         #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; max-height: 150px; overflow-y: auto; display: none; margin-bottom: 10px; }
         .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); transition: all 0.15s; }
         .res-item:hover { background: #1c2128; }
