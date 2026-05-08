@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Moveset Builder Ultra V3.5</title>
+    <script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm/dist/index.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117; --side: #161b22; --border: #30363d;
+            --accent: #58a6ff; --text: #c9d1d9; --bright: #f0f6fc; --danger: #f85149;
+        }
+        * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+        /* V3 LAYOUT (Untouched) */
+        .sidebar { width: 280px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); }
+        .inspector { width: 320px; background: var(--side); padding: 15px; overflow-y: auto; flex-shrink: 0; }
+
+        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); }
+        
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; }
+        .btn:hover { background: #30363d; border-color: #8b949e; }
+        .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
+        
+        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; }
+
+        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; cursor: pointer; border-left: 4px solid transparent; }
+        .move-card.active { border-left-color: var(--accent); background: #1c2128; }
+        
+        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        
+        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; max-height: 150px; overflow-y: auto; display: none; margin-bottom: 10px; }
+        .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); }
+
+        .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; overflow-y: auto; }
+            .sidebar, .inspector { width: 100%; height: auto; border: none; }
+            .canvas { min-height: 450px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="header">
+        <span style="font-weight:900; color:var(--accent);">ULTRA V3.5</span>
+        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff;">ZSTD: LOADING</div>
+    </div>
+    <div style="padding:15px; overflow-y:auto;">
+        <label>Roblox Asset Lookup</label>
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+            <input id="searchIn" placeholder="Find ID..." style="margin:0;">
+            <button onclick="searchRoblox()" class="btn primary">GO</button>
+        </div>
+        <div id="searchRes"></div>
+
+        <label>Add New Move</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+            <button onclick="addM('SKILL')" class="btn">SKILL</button>
+            <button onclick="addM('MELEE')" class="btn">MELEE</button>
+            <button onclick="addM('CHASE')" class="btn">CHASE</button>
+            <button onclick="addM('ULTIMATE')" class="btn">ULTIMATE</button>
+            <button onclick="addM('SPECIAL')" class="btn">SPECIAL</button>
+            <button onclick="addM('AWK')" class="btn">AWK</button>
+        </div>
+
+        <div id="palette"></div>
+    </div>
+</div>
+
+<div class="canvas">
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+        <h3 style="margin:0;">Workspace</h3>
+        <div style="display:flex; gap:8px;">
+            <button class="btn" onclick="importZ()">Import</button>
+            <button class="btn primary" onclick="exportZ()">Export Zstd</button>
+        </div>
+    </div>
+    <div id="ws"></div>
+</div>
+
+<div class="inspector">
+    <label>Properties</label>
+    <div id="ins-content">
+        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a block</p>
+    </div>
+</div>
+
+<script>
+    window.zstdEngine = null;
+    let moves = [];
+    let selM = null;
+    let selB = null;
+
+    // THE FULL ARSENAL
+    const library = {
+        "Combat": {
+            HITBOX: { SIZE: "6,6,6", DAMAGE: 10, STUN: 0.5, BLOCKABLE: true, POSITION: "0,0,3", HIT_RAGDOLL: false, ATTACK_TYPE: "Melee", CAN_KILL: true },
+            COUNTER: { TIME: 0.5, BRANCH: "Hit", ATTACK_TYPE2: "Melee", REMOVE_ON_HIT: true },
+            GRAB: { TIME: 1, BODY_PART: "Torso", BODY_PART2: "Head", POSITION: "0,0,0.5", ROTATION: "0,0,90" },
+            ULTGIB: { AMOUNT: 20 },
+            HPGIB: { AMOUNT: -15 }
+        },
+        "Logic": {
+            WAIT: { TIME: 0.1 },
+            TAG: { TAG: "user", VALUE: "1", CHECK: false, SET: true },
+            BRANCH: { BRANCH: "1" },
+            STATE: { STATE: "IFrame", TIME: 1, CANCEL_ON_END: true, VALUE: 1 },
+            LOOP: { LOOP_BACK: 1, LOOP_AMOUNT: 5, HOLD: false },
+            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: true }
+        },
+        "Visual/Audio": {
+            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.1, LOOPED: false },
+            SFX: { ID: "0", VOLUME: 1, START: 0, SPEED: 1, GLOBAL: false, PARENT: "HumanoidRootPart" },
+            VISUAL: { EFFECT: "Glow", COLOR: "255,255,255", TIME: 0.5, POSITION: "0,0,0", SIZE: 1, EASING_STYLE: "Linear", OPACITY: 0, ALT_SIZE: 1, BODY_PART: "HumanoidRootPart" }
+        },
+        "Motion": {
+            VELO: { FORCE: "0,0,50", TIME: 0.2, FADE: true, TRACK: true, RAGDOLL: 0 },
+            CHASE: { TARGET: "Enemy", SPEED: 50, TIME: 0.5 }
+        }
+    };
+
+    window.onload = () => {
+        // Load the REAL Zstd Engine
+        if (typeof hpccWasm !== 'undefined') {
+            hpccWasm.Zstd.load().then(zstd => {
+                window.zstdEngine = zstd;
+                const stat = document.getElementById('z-status');
+                stat.innerText = "ZSTD READY";
+                stat.style.background = "#238636";
+            }).catch(err => {
+                document.getElementById('z-status').innerText = "WASM BLOCKED";
+            });
+        }
+
+        // Build Palette
+        const pal = document.getElementById('palette');
+        for(let cat in library) {
+            let l = document.createElement('div'); l.className = 'cat-label'; l.innerText = cat;
+            pal.appendChild(l);
+            let g = document.createElement('div'); g.style = 'display:grid; grid-template-columns: 1fr 1fr; gap:5px;';
+            for(let b in library[cat]) {
+                let btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = b;
+                btn.onclick = () => addBlock(b, library[cat][b]);
+                g.appendChild(btn);
+            }
+            pal.appendChild(g);
+        }
+        addM('SKILL');
+    };
+
+    function addM(t) {
+        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false }, Req: [], Branch: {} } });
+        selectM(moves.length - 1);
+    }
+
+    function selectM(i) { selM = i; selB = null; render(); }
+
+    function addBlock(key, data) {
+        if(selM === null) return;
+        moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
+        render();
+    }
+
+    function render() {
+        const ws = document.getElementById('ws');
+        ws.innerHTML = moves.map((m, i) => `
+            <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:var(--accent); font-size:15px;">${m.NAME}</strong>
+                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME}</span>
+                </div>
+                <div>
+                    ${m.DATA.Line.map((b, bi) => `
+                        <div class="block-row" onclick="event.stopPropagation(); selM=${i}; selB=${bi}; renderInspector();">
+                            <span>${b.K_NAME}</span>
+                            <span style="color:var(--danger); cursor:pointer;" onclick="moves[${i}].DATA.Line.splice(${bi},1); render();">✕</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+        renderInspector();
+    }
+
+    function renderInspector() {
+        const ins = document.getElementById('ins-content');
+        if (selM === null) return;
+        const m = moves[selM];
+
+        if (selB !== null) {
+            const b = m.DATA.Line[selB];
+            let h = `<h3 style="margin:0 0 15px 0; color:var(--accent);">${b.K_NAME}</h3>`;
+            for(let k in b) {
+                if(k === 'K_NAME') continue;
+                h += `<label>${k.replace(/_/g, ' ')}</label>`;
+                if(typeof b[k] === 'boolean') {
+                    h += `<select onchange="upd('${k}', this.value === 'true')"><option value="true" ${b[k]?'selected':''}>True</option><option value="false" ${!b[k]?'selected':''}>False</option></select>`;
+                } else {
+                    h += `<input value="${b[k]}" oninput="upd('${k}', this.value)">`;
+                }
+            }
+            ins.innerHTML = h;
+        } else {
+            ins.innerHTML = `
+                <label>Move Name</label><input value="${m.NAME}" oninput="moves[selM].NAME=this.value; render()">
+                <label>Move Type (K_NAME)</label>
+                <select onchange="moves[selM].K_NAME=this.value; render()">
+                    <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
+                    <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
+                    <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
+                    <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
+                    <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
+                    <option ${m.K_NAME=='AWK'?'selected':''}>AWK</option>
+                </select>
+                <label>Cooldown</label><input type="number" value="${m.COOLDOWN}" oninput="moves[selM].COOLDOWN=Number(this.value)">
+                <label>Input Key (ID)</label><input type="number" value="${m.KEY}" oninput="moves[selM].KEY=Number(this.value)">
+                <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+                <label>Prop: USE</label><select onchange="moves[selM].DATA.Prop.USE=(this.value==='true')"><option value="true" ${m.DATA.Prop.USE?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.USE?'selected':''}>False</option></select>
+                <label>Prop: AWK</label><select onchange="moves[selM].DATA.Prop.AWK=(this.value==='true')"><option value="true" ${m.DATA.Prop.AWK?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.AWK?'selected':''}>False</option></select>
+                <label>Prop: NOCANCEL</label><select onchange="moves[selM].DATA.Prop.NOCANCEL=(this.value==='true')"><option value="true" ${m.DATA.Prop.NOCANCEL?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.NOCANCEL?'selected':''}>False</option></select>
+            `;
+        }
+    }
+
+    function upd(k, v) {
+        let val = v;
+        if(!isNaN(v) && v.trim() !== "" && typeof v !== 'boolean') val = Number(v);
+        moves[selM].DATA.Line[selB][k] = val;
+    }
+
+    async function searchRoblox() {
+        const q = document.getElementById('searchIn').value;
+        const box = document.getElementById('searchRes');
+        box.style.display = 'block'; box.innerHTML = "<div style='padding:10px;'>Searching RoProxy...</div>";
+        try {
+            // Using RoProxy, a dedicated API proxy for Roblox that bypasses the AllOrigins throttle
+            const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+            const json = await res.json();
+            if (json.data && json.data.length > 0) {
+                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: '+${i.id})">${i.name} (${i.id})</div>`).join('');
+            } else {
+                box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
+            }
+        } catch(e) { 
+            // Fallback to CodeTabs proxy if RoProxy fails
+            try {
+                const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=https://catalog.roblox.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+                const json = await res.json();
+                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: '+${i.id})">${i.name} (${i.id})</div>`).join('');
+            } catch(err) {
+                box.innerHTML = "<div style='padding:10px; color:var(--danger);'>Network Blocked. Try Manual ID.</div>"; 
+            }
+        }
+    }
+
+    function exportZ() {
+        if(!window.zstdEngine) return alert("Zstd library failed to load. Check your internet connection.");
+        const raw = JSON.stringify(moves.map(m => ({ ...m, DATA: JSON.stringify(m.DATA) })));
+        try {
+            const uint8 = new TextEncoder().encode(raw);
+            const compressed = window.zstdEngine.compress(uint8);
+            const b64 = btoa(String.fromCharCode.apply(null, compressed));
+            const t = document.createElement('textarea');
+            t.value = b64; document.body.appendChild(t); t.select();
+            document.execCommand('copy'); document.body.removeChild(t);
+            alert("SUCCESS! Real Zstd String Copied.");
+        } catch(e) { alert("Export Error: " + e.message); }
+    }
+
+    function importZ() {
+        const s = prompt("Paste Zstd Data:");
+        if(!s || !window.zstdEngine) return;
+        try {
+            const bin = Uint8Array.from(atob(s), c => c.charCodeAt(0));
+            const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bin));
+            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
+            render();
+        } catch(e) { alert("Import Failed. Are you sure this is a valid Zstd string?"); }
+    }
+</script>
+</body>
+</html>
