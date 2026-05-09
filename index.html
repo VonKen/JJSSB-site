@@ -25,7 +25,7 @@
         * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
 
-        .sidebar { width: 280px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar { width: 300px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
         .sidebar-content { padding: 15px; overflow-y: auto; flex: 1; min-height: 0; }
         
         .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); min-width: 0; }
@@ -44,6 +44,10 @@
         .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid transparent; transition: all 0.15s; }
         .move-card.active { border-left-color: var(--accent); background: #1c2128; border-color:#484f58; }
         
+        .branch-bar { display: flex; gap: 5px; margin-top: 10px; overflow-x: auto; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 10px; scrollbar-width: thin; }
+        .branch-bar::-webkit-scrollbar { height: 4px; }
+        .branch-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
         .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; font-size: 12px; transition: all 0.15s; }
         .block-row-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .block-row:hover { border-color: #484f58; }
@@ -56,8 +60,7 @@
         .settings-grid label { margin: 0; }
         .settings-grid input, .settings-grid select { margin-bottom: 0; padding: 6px; }
 
-        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: none; margin-bottom: 10px; }
-        .preview-img { width: 100%; height: 120px; object-fit: contain; background: #0d1117; border-radius: 6px; margin-bottom: 10px; border: 1px solid var(--border); }
+        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 5px; display: none; margin-bottom: 10px; max-height: 250px; overflow-y: auto; }
         .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
 
         @media (max-width: 900px) {
@@ -78,11 +81,17 @@
         <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression status">ZSTD: LOADING</div>
     </div>
     <div class="sidebar-content">
-        <label>Roblox Asset Fetcher</label>
-        <div style="display:flex; gap:5px; margin-bottom:10px;">
-            <input id="searchIn" placeholder="Paste Asset ID..." style="margin:0; flex:1;" onkeypress="if(event.key==='Enter') fetchAsset()">
-            <button onclick="fetchAsset()" class="btn primary" title="Fetch asset info and preview">FETCH</button>
+        <label>Roblox Toolbox Search</label>
+        <div style="display:flex; gap:5px; margin-bottom:5px;">
+            <select id="assetTypeSearch" style="margin:0; width:45%;">
+                <option value="Audio">Audio</option>
+                <option value="Decals">Decals</option>
+                <option value="Meshes">Meshes</option>
+                <option value="Animations">Animations</option>
+            </select>
+            <input id="searchIn" placeholder="Keyword..." style="margin:0; flex:1;" onkeypress="if(event.key==='Enter') searchRoblox()">
         </div>
+        <button onclick="searchRoblox()" class="btn primary" style="width:100%; margin-bottom:10px;" title="Search Roblox toolbox">SEARCH TOOLBOX</button>
         <div id="searchRes"></div>
 
         <label>Add New Move</label>
@@ -122,9 +131,9 @@
     window.zstdEngine = null;
     let moves = [];
     let selM = null;
-    let expandedBlock = null; // Track which block is open inline
+    let selBranch = null; // null means "Main Line"
+    let expandedBlock = null;
 
-    // FULL ARSENAL derived exactly from the provided JSON files
     const library = {
         "Combat": {
             HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
@@ -154,6 +163,7 @@
     };
 
     function escapeHtml(text) {
+        if(typeof text !== 'string') return text;
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -188,48 +198,68 @@
 
     function selectM(i) { 
         selM = i; 
+        selBranch = null; 
         expandedBlock = null; 
         render(); 
     }
 
-    function toggleBlock(bi) {
-        if (expandedBlock === bi) {
-            expandedBlock = null; // collapse
-        } else {
-            expandedBlock = bi; // expand
+    function addBranch() {
+        const name = prompt("Enter new branch name (e.g., 'hit', 'endlag'):");
+        if(name && name.trim() !== "") {
+            const cleanName = name.trim();
+            if(!moves[selM].DATA.Branch) moves[selM].DATA.Branch = {};
+            if(!moves[selM].DATA.Branch[cleanName]) {
+                moves[selM].DATA.Branch[cleanName] = { Req: [], Line: [] };
+            }
+            selBranch = cleanName;
+            expandedBlock = null;
+            render();
+            autoSave();
         }
+    }
+
+    function toggleBlock(bi) {
+        expandedBlock = (expandedBlock === bi) ? null : bi;
         render();
     }
 
     function addBlock(key, data) {
         if(selM === null) return;
-        moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
-        expandedBlock = moves[selM].DATA.Line.length - 1; // Auto-expand new block
+        let activeLine = selBranch === null ? moves[selM].DATA.Line : moves[selM].DATA.Branch[selBranch].Line;
+        activeLine.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
+        expandedBlock = activeLine.length - 1; 
         render();
+        autoSave();
     }
 
     function deleteMove(i) {
         if(confirm("Delete this move?")) {
             moves.splice(i, 1);
             selM = null;
+            selBranch = null;
             expandedBlock = null;
             render();
+            autoSave();
         }
     }
 
     function deleteBlock(bi, e) {
         e.stopPropagation();
-        moves[selM].DATA.Line.splice(bi, 1);
+        let activeLine = selBranch === null ? moves[selM].DATA.Line : moves[selM].DATA.Branch[selBranch].Line;
+        activeLine.splice(bi, 1);
         if (expandedBlock === bi) expandedBlock = null;
         render();
+        autoSave();
     }
 
     function clearWS() {
         if(confirm("Clear entire workspace? Cannot undo.")) {
             moves = [];
             selM = null;
+            selBranch = null;
             expandedBlock = null;
             render();
+            autoSave();
         }
     }
 
@@ -241,29 +271,49 @@
             return;
         }
         
-        ws.innerHTML = moves.map((m, i) => `
-            <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
+        ws.innerHTML = moves.map((m, i) => {
+            const isActiveMove = selM === i;
+            let activeLine = [];
+            if (isActiveMove) {
+                activeLine = selBranch === null ? m.DATA.Line : (m.DATA.Branch && m.DATA.Branch[selBranch] ? m.DATA.Branch[selBranch].Line : []);
+            } else {
+                activeLine = m.DATA.Line; // Just for counting preview on inactive
+            }
+
+            return `
+            <div class="move-card ${isActiveMove?'active':''}" onclick="selectM(${i})">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME || 'Unnamed')}</strong>
                     <span style="font-size:10px; opacity:0.6;">${m.K_NAME} | KEY: ${m.KEY || '-'}</span>
                 </div>
                 <div style="display:flex; gap:5px; margin-top:8px;">
-                    <span style="font-size:9px; color:#8b949e; flex:1;">${m.DATA.Line.length} block(s)</span>
+                    <span style="font-size:9px; color:#8b949e; flex:1;">${activeLine.length} block(s) in active line</span>
                     <span style="color:var(--danger); cursor:pointer; font-size:11px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕ Delete</span>
                 </div>
-                <div style="margin-top: 10px;">
-                    ${m.DATA.Line.map((b, bi) => {
-                        const isExpanded = expandedBlock === bi && selM === i;
+                
+                ${isActiveMove ? `
+                    <div class="branch-bar">
+                        <button class="btn ${selBranch===null?'primary':''}" onclick="event.stopPropagation(); selBranch=null; expandedBlock=null; render();">Main Line</button>
+                        ${Object.keys(m.DATA.Branch || {}).map(bName => `
+                            <button class="btn ${selBranch===bName?'primary':''}" onclick="event.stopPropagation(); selBranch='${bName}'; expandedBlock=null; render();">↳ ${escapeHtml(bName)}</button>
+                        `).join('')}
+                        <button class="btn" onclick="event.stopPropagation(); addBranch();" style="color: var(--accent);">+ Branch</button>
+                    </div>
+                ` : ''}
+
+                <div style="${isActiveMove ? '' : 'display:none;'}">
+                    ${activeLine.map((b, bi) => {
+                        const isExpanded = expandedBlock === bi;
                         return `
                         <div class="block-row ${isExpanded ? 'expanded' : ''}">
-                            <div class="block-row-header" onclick="event.stopPropagation(); selM=${i}; toggleBlock(${bi});">
-                                <span><strong>${bi+1}.</strong> ${escapeHtml(b.K_NAME)}</span>
+                            <div class="block-row-header" onclick="event.stopPropagation(); toggleBlock(${bi});">
+                                <span><strong style="color:#8b949e;">${bi+1}.</strong> ${escapeHtml(b.K_NAME)}</span>
                                 <div>
                                     <span style="font-size:10px; color:#8b949e; margin-right:8px;">${isExpanded ? '▼' : '▶'}</span>
-                                    <span style="color:var(--danger); cursor:pointer;" onclick="deleteBlock(${bi}, event)" title="Delete block">✕</span>
+                                    <span style="color:var(--danger); cursor:pointer; font-weight:bold;" onclick="deleteBlock(${bi}, event)" title="Delete block">✕</span>
                                 </div>
                             </div>
-                            <div class="block-settings">
+                            <div class="block-settings" onclick="event.stopPropagation();">
                                 <div class="settings-grid">
                                     ${Object.keys(b).filter(k => k !== 'K_NAME').map(k => {
                                         const val = b[k];
@@ -289,9 +339,10 @@
                             </div>
                         </div>
                     `}).join('')}
+                    ${activeLine.length === 0 ? '<p style="font-size:11px; color:#484f58; text-align:center;">This line is empty.</p>' : ''}
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         
         renderInspector();
     }
@@ -303,13 +354,14 @@
             return;
         }
         const m = moves[selM];
-        // Only Move Properties go here now.
+        if(!m.DATA.Prop) m.DATA.Prop = {};
+
         ins.innerHTML = `
             <label>Move Name</label>
-            <input value="${escapeHtml(m.NAME || '')}" onchange="moves[selM].NAME=this.value; render()">
+            <input value="${escapeHtml(m.NAME || '')}" onchange="moves[selM].NAME=this.value; render(); autoSave();">
             
             <label>Move Type (K_NAME)</label>
-            <select onchange="moves[selM].K_NAME=this.value; render()">
+            <select onchange="moves[selM].K_NAME=this.value; render(); autoSave();">
                 <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
                 <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
                 <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
@@ -319,20 +371,20 @@
             </select>
             
             <label>Cooldown</label>
-            <input type="number" value="${m.COOLDOWN || 0}" onchange="moves[selM].COOLDOWN=Number(this.value); render()">
+            <input type="number" value="${m.COOLDOWN || 0}" onchange="moves[selM].COOLDOWN=Number(this.value); render(); autoSave();">
             
             <label>Input Key (ID)</label>
-            <input type="number" value="${m.KEY || 1}" onchange="moves[selM].KEY=Number(this.value); render()">
+            <input type="number" value="${m.KEY || 1}" onchange="moves[selM].KEY=Number(this.value); render(); autoSave();">
             
             <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
             
             <h4 style="margin:0 0 10px 0; color:var(--accent); font-size:12px;">Boolean Props</h4>
             ${['USE', 'AWK', 'AWK2', 'NOCANCEL', 'NOSTUN', 'INV'].map(prop => `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; font-size:12px;">
                     <label style="margin:0;">${prop}</label>
-                    <select style="width:60px; padding:4px; margin:0;" onchange="updateProp('${prop}', this.value === 'true')">
-                        <option value="true" ${(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>True</option>
-                        <option value="false" ${!(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>False</option>
+                    <select style="width:70px; padding:4px; margin:0;" onchange="updateProp('${prop}', this.value === 'true')">
+                        <option value="true" ${m.DATA.Prop[prop]?'selected':''}>True</option>
+                        <option value="false" ${!m.DATA.Prop[prop]?'selected':''}>False</option>
                     </select>
                 </div>
             `).join('')}
@@ -340,90 +392,93 @@
     }
 
     function updateProp(prop, val) {
-        if (!moves[selM].DATA.Prop) moves[selM].DATA.Prop = {};
         moves[selM].DATA.Prop[prop] = val;
+        autoSave();
     }
 
-    // Update block specific fields. Uses `onchange` so it only fires when clicking away.
     function upd(bi, k, v) {
         let val = v;
         if (typeof v !== 'boolean') {
-            // Attempt to parse arrays/objects like "[0, 15]"
             try {
                 if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
                     val = JSON.parse(v);
                 } else if (!isNaN(v) && v.trim() !== "") {
                     val = Number(v);
                 }
-            } catch(e) {
-                // Keep as string if parsing fails
-            }
+            } catch(e) {}
         }
-        moves[selM].DATA.Line[bi][k] = val;
-        // Do not force render() here so we don't disrupt user flow, it's saved in state.
+        let activeLine = selBranch === null ? moves[selM].DATA.Line : moves[selM].DATA.Branch[selBranch].Line;
+        activeLine[bi][k] = val;
+        autoSave();
     }
 
-    async function fetchAsset() {
-        const id = document.getElementById('searchIn').value.trim();
-        if(!id || isNaN(id)) {
-            alert("Please enter a valid numeric Asset ID.");
-            return;
-        }
+    async function searchRoblox() {
+        const q = document.getElementById('searchIn').value.trim();
+        const type = document.getElementById('assetTypeSearch').value;
+        if(!q) return;
         
         const box = document.getElementById('searchRes');
         box.style.display = 'block'; 
-        box.innerHTML = "<div style='color:var(--accent); font-size:12px;'>Fetching details...</div>";
+        box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Toolbox...</div>";
         
         try {
-            // Fetch asset details via economy proxy
-            const res = await fetch(`https://economy.roproxy.com/v2/assets/${id}/details`);
-            const data = await res.json();
+            // Toolbox API via RoProxy
+            const url = `https://apis.roproxy.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`;
+            const res = await fetch(url);
+            const json = await res.json();
             
-            let name = data.Name || "Unknown Asset";
-            let type = data.AssetTypeId || "Unknown Type";
-            let typeName = getTypeName(type);
-            
-            // Build Thumbnail URL
-            let thumbUrl = `https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`;
-            
-            let html = `
-                <img src="${thumbUrl}" class="preview-img" onerror="this.style.display='none'">
-                <div style="font-size:13px; font-weight:bold; margin-bottom:4px;">${escapeHtml(name)}</div>
-                <div style="font-size:10px; color:#8b949e; margin-bottom:10px;">Type: ${typeName}</div>
-                
-                <div style="display:flex; gap:5px;">
-                    <button class="btn primary" style="flex:1;" onclick="navigator.clipboard.writeText('${id}'); alert('Copied ID: ${id}')">Copy ID</button>
-            `;
-            
-            // Helpful note/button for meshes or decals
-            if (type === 13 || type === 1) { // Decal / Image
-                html += `<button class="btn" style="flex:1;" onclick="navigator.clipboard.writeText('${id-1}'); alert('Copied Texture ID (ID-1): ${id-1}\\nNote: If this doesn\\'t work, try grabbing it directly from Studio.')">Copy Image ID</button>`;
+            if (json.data && json.data.length > 0) {
+                renderResults(json.data.map(i => ({ id: i.asset.id, name: i.asset.name })), type, box);
+            } else {
+                box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found in this category.</div>";
             }
-            
-            html += `</div>`;
-            box.innerHTML = html;
-
         } catch(e) { 
-            box.innerHTML = `
-                <div style='color:var(--danger); font-size:11px; margin-bottom:5px;'>Could not fetch API details.</div>
-                <img src="https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false" class="preview-img" onerror="this.style.display='none'">
-                <button class="btn primary" style="width:100%;" onclick="navigator.clipboard.writeText('${id}'); alert('Copied ID: ${id}')">Copy ID Anyway</button>
-            `;
+            // Fallback to Catalog Search if toolbox endpoint is blocked/down
+            try {
+                const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+                const json = await res.json();
+                if(json.data && json.data.length > 0) {
+                    renderResults(json.data.map(i => ({ id: i.id, name: i.name })), type, box);
+                } else {
+                    box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found.</div>";
+                }
+            } catch(err) {
+                box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked. Try manual ID entry.</div>"; 
+            }
         }
     }
 
-    function getTypeName(typeId) {
-        const types = { 1: "Image", 3: "Audio", 4: "Mesh", 9: "Place", 13: "Decal", 24: "Animation", 40: "MeshPart" };
-        return types[typeId] || `Asset Type ${typeId}`;
+    function renderResults(items, type, box) {
+        box.innerHTML = items.map(a => {
+            let thumb = `https://thumbnails.roproxy.com/v1/assets?assetIds=${a.id}&returnPolicy=PlaceHolder&size=150x150&format=Png`;
+            return `
+                <div style="display:flex; gap:10px; margin-bottom:10px; padding:8px; border:1px solid var(--border); border-radius:6px; background:#1c2128;">
+                    <img src="${thumb}" style="width:40px; height:40px; border-radius:4px; object-fit:cover; background:#000;" onerror="this.src=''">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
+                        <div style="display:flex; gap:5px; margin-top:5px;">
+                            <button class="btn primary" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')">ID</button>
+                            ${(type === 'Decals' || type === 'Meshes') ? `<button class="btn" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Try ID-1 for Texture/Mesh ID">ID-1</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.copyID = function(id) {
+        navigator.clipboard.writeText(id).then(() => {
+            alert(`Copied ID: ${id}`);
+        });
     }
 
     function autoSave() {
-        try { localStorage.setItem('moveset_autosave', JSON.stringify(moves)); } catch(e) {}
+        try { localStorage.setItem('moveset_autosave_v36', JSON.stringify(moves)); } catch(e) {}
     }
 
     function loadAutoSave() {
         try {
-            const saved = localStorage.getItem('moveset_autosave');
+            const saved = localStorage.getItem('moveset_autosave_v36');
             if(saved) moves = JSON.parse(saved);
         } catch(e) {}
     }
@@ -459,10 +514,16 @@
             const bytes = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
             const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bytes));
-            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
+            moves = JSON.parse(decoded).map(m => {
+                let parsedData = m.DATA;
+                if (typeof m.DATA === 'string') parsedData = JSON.parse(m.DATA);
+                return { ...m, DATA: parsedData };
+            });
             selM = null;
+            selBranch = null;
             expandedBlock = null;
             render();
+            autoSave();
             alert("✓ Moveset imported successfully!");
         } catch(e) { alert("Import failed. Check that the Zstd string is valid.\n" + e.message); }
     }
