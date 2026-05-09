@@ -438,19 +438,37 @@
         box.style.display = 'block'; 
         box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Toolbox API...</div>";
         
-        try {
-            const url = `https://apis.roproxy.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`;
-            const res = await fetch(url);
-            const json = await res.json();
-            
-            if (json.data && json.data.length > 0) {
-                renderResults(json.data, type, box);
-            } else {
-                box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found in this category.</div>";
+        // Official endpoint used by Roblox Studio
+        const url = `https://apis.roblox.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`;
+        
+        // Arrays of proxies to try since Roblox routinely IP-bans standard proxies like RoProxy
+        const proxies = [
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+            `https://apis.roproxy.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`
+        ];
+
+        for (let proxy of proxies) {
+            try {
+                const res = await fetch(proxy);
+                if (!res.ok) continue; // Try next proxy
+                
+                const json = await res.json();
+                
+                if (json.data && json.data.length > 0) {
+                    renderResults(json.data, type, box);
+                    return; // Success, exit function
+                } else if (json.data && json.data.length === 0) {
+                    box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found for this search.</div>";
+                    return; // Searched successfully, just empty
+                }
+            } catch(e) {
+                console.warn("Proxy failed, trying next fallback...");
             }
-        } catch(e) { 
-            box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked or Proxy is down.</div>"; 
         }
+
+        // If it falls through the loop, all proxies failed.
+        box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>All proxies blocked by Roblox API. Try again later or use manual IDs.</div>";
     }
 
     function renderResults(items, type, box) {
