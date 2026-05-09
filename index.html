@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Moveset Builder Ultra V3.5</title>
+    <title>Moveset Builder Ultra V3.6</title>
     <script type="module">
-        // Updated to the correct, modern package for ZSTD
         import { Zstd } from "https://esm.sh/@hpcc-js/wasm-zstd@1.12.5?bundle";
         try {
             const zstd = await Zstd.load();
@@ -26,37 +25,41 @@
         * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
 
-        /* FIXED V3 LAYOUT */
         .sidebar { width: 280px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
         .sidebar-content { padding: 15px; overflow-y: auto; flex: 1; min-height: 0; }
         
         .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); min-width: 0; }
-        .inspector { width: 320px; background: var(--side); padding: 15px; overflow-y: auto; flex-shrink: 0; }
+        .inspector { width: 280px; background: var(--side); padding: 15px; overflow-y: auto; flex-shrink: 0; }
 
         .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); flex-shrink: 0; }
         
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; }
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; text-align: center;}
         .btn:hover { background: #30363d; border-color: #8b949e; }
         .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
-        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; }
+        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
+        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; margin-top: 5px; }
 
-        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; cursor: pointer; border-left: 4px solid transparent; transition: all 0.15s; }
-        .move-card:hover { border-color: #484f58; }
-        .move-card.active { border-left-color: var(--accent); background: #1c2128; }
+        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid transparent; transition: all 0.15s; }
+        .move-card.active { border-left-color: var(--accent); background: #1c2128; border-color:#484f58; }
         
-        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; transition: all 0.15s; }
-        .block-row:hover { border-color: #484f58; background: #161b22; }
+        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; font-size: 12px; transition: all 0.15s; }
+        .block-row-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .block-row:hover { border-color: #484f58; }
+        .block-row.expanded { border-color: var(--accent); background: #161b22; }
         
-        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; max-height: 150px; overflow-y: auto; display: none; margin-bottom: 10px; }
-        .res-item { padding: 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--accent); transition: all 0.15s; word-wrap: break-word; }
-        .res-item:hover { background: #1c2128; }
+        .block-settings { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: none; }
+        .block-row.expanded .block-settings { display: block; }
+        
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; align-items: center;}
+        .settings-grid label { margin: 0; }
+        .settings-grid input, .settings-grid select { margin-bottom: 0; padding: 6px; }
 
+        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: none; margin-bottom: 10px; }
+        .preview-img { width: 100%; height: 120px; object-fit: contain; background: #0d1117; border-radius: 6px; margin-bottom: 10px; border: 1px solid var(--border); }
         .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
 
-        /* FIXED MOBILE LAYOUT: Lets the entire page scroll naturally instead of nested scrolling boxes */
         @media (max-width: 900px) {
             body { flex-direction: column; overflow-y: auto; height: auto; display: block; }
             .sidebar, .inspector { width: 100%; height: auto; border: none; flex-shrink: 1; }
@@ -71,14 +74,14 @@
 
 <div class="sidebar">
     <div class="header">
-        <span style="font-weight:900; color:var(--accent);">ULTRA V3.5</span>
+        <span style="font-weight:900; color:var(--accent);">ULTRA V3.6</span>
         <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression status">ZSTD: LOADING</div>
     </div>
     <div class="sidebar-content">
-        <label>Roblox Asset Lookup</label>
+        <label>Roblox Asset Fetcher</label>
         <div style="display:flex; gap:5px; margin-bottom:10px;">
-            <input id="searchIn" placeholder="Find ID..." style="margin:0; flex:1;" onkeypress="if(event.key==='Enter') searchRoblox()">
-            <button onclick="searchRoblox()" class="btn primary" title="Search Roblox catalog">GO</button>
+            <input id="searchIn" placeholder="Paste Asset ID..." style="margin:0; flex:1;" onkeypress="if(event.key==='Enter') fetchAsset()">
+            <button onclick="fetchAsset()" class="btn primary" title="Fetch asset info and preview">FETCH</button>
         </div>
         <div id="searchRes"></div>
 
@@ -89,7 +92,7 @@
             <button onclick="addM('CHASE')" class="btn" title="Create new CHASE move">CHASE</button>
             <button onclick="addM('ULTIMATE')" class="btn" title="Create new ULTIMATE move">ULTIMATE</button>
             <button onclick="addM('SPECIAL')" class="btn" title="Create new SPECIAL move">SPECIAL</button>
-            <button onclick="addM('AWK')" class="btn" title="Create new AWK move">AWK</button>
+            <button onclick="addM('AWAKENING')" class="btn" title="Create new AWAKENING move">AWK</button>
         </div>
 
         <div id="palette"></div>
@@ -109,9 +112,9 @@
 </div>
 
 <div class="inspector">
-    <label>Properties</label>
+    <label>Move Properties</label>
     <div id="ins-content">
-        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a block</p>
+        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>
     </div>
 </div>
 
@@ -119,32 +122,34 @@
     window.zstdEngine = null;
     let moves = [];
     let selM = null;
-    let selB = null;
+    let expandedBlock = null; // Track which block is open inline
 
+    // FULL ARSENAL derived exactly from the provided JSON files
     const library = {
         "Combat": {
-            HITBOX: { SIZE: "6,6,6", DAMAGE: 10, STUN: 0.5, BLOCKABLE: true, POSITION: "0,0,3", HIT_RAGDOLL: false, ATTACK_TYPE: "Melee", CAN_KILL: true },
-            COUNTER: { TIME: 0.5, BRANCH: "Hit", ATTACK_TYPE2: "Melee", REMOVE_ON_HIT: true },
-            GRAB: { TIME: 1, BODY_PART: "Torso", BODY_PART2: "Head", POSITION: "0,0,0.5", ROTATION: "0,0,90" },
+            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
+            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false, "360_BLOCK": false, HIT_USER: false, PROJECTILE_TAG: "", BRANCH: "", BRANCH_TARGET: "", CONTINUE: false, FILTER_INTERVAL: 1, AIM_LAST_HIT: -1 },
+            COUNTER: { TIME: 0.5, STUN: 1, BRANCH: "hit", ATTACK_TYPE2: "Melee,Bullet,Swarm,Explosion,Domain", REMOVE_ON_HIT: true, CANCEL_ENEMY: true },
+            GRAB: { TIME: 1, BODY_PART: "HumanoidRootPart", BODY_PART2: "HumanoidRootPart", POSITION: "0, 0, 4", ROTATION: "0, 180, 0", LAST_HIT: 1 },
             ULTGIB: { AMOUNT: 20 },
-            HPGIB: { AMOUNT: -15 }
+            HPGIB: { AMOUNT: -15 },
+            HITCNCL: { BRANCH: "endlag", TIME: 1, ENDLAG: 1, FLIP: true }
         },
         "Logic": {
-            WAIT: { TIME: 0.1 },
-            TAG: { TAG: "user", VALUE: "1", CHECK: false, SET: true },
-            BRANCH: { BRANCH: "1" },
-            STATE: { STATE: "IFrame", TIME: 1, CANCEL_ON_END: true, VALUE: 1 },
+            WAIT: { TIME: 0.2 },
+            TAG: { TAG: "marker", VALUE: "1", CHECK: false, SET: true, TIME: 1, BRANCH: "" },
+            BRANCH: { BRANCH: "1", RANDOM: "" },
+            STATE: { STATE: "Stun", TIME: 1, VALUE: 1, CANCEL_ON_END: false, LAST_HIT: -1 },
             LOOP: { LOOP_BACK: 1, LOOP_AMOUNT: 5, HOLD: false },
-            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: true }
+            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: false, HOLD_FOR: 0 }
         },
         "Visual/Audio": {
-            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.1, LOOPED: false },
-            SFX: { ID: "0", VOLUME: 1, START: 0, SPEED: 1, GLOBAL: false, PARENT: "HumanoidRootPart" },
-            VISUAL: { EFFECT: "Glow", COLOR: "255,255,255", TIME: 0.5, POSITION: "0,0,0", SIZE: 1, EASING_STYLE: "Linear", OPACITY: 0, ALT_SIZE: 1, BODY_PART: "HumanoidRootPart" }
+            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.2, LOOPED: false, PREVIEW: "[0,1]", LAST_HIT: -1 },
+            SFX: { ID: "0", VOLUME: 2, SPEED: 1, START: 0, CANCEL: false, END: 500, GLOBAL: false },
+            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, ROTATION: "0, 0, 0", ALT_ROTATION: "0, 0, 0", EASING_STYLE: "Linear", EASING_DIRECTION: "In", BODY_PART: "HumanoidRootPart", AMOUNT: 1, LAST_HIT: -1, CANCEL_ON_INTERRUPT: false, TEXTURE: 0, RUN_ON_SERVER: false }
         },
         "Motion": {
-            VELO: { FORCE: "0,0,50", TIME: 0.2, FADE: true, TRACK: true, RAGDOLL: 0 },
-            CHASE: { TARGET: "Enemy", SPEED: 50, TIME: 0.5 }
+            VELO: { FORCE: "0, 0, 50", TIME: 0.2, FADE: true, TRACK: false, RAGDOLL: 0, TRUE_RAGDOLL: false, LAST_HIT: -1 }
         }
     };
 
@@ -177,15 +182,29 @@
     }
 
     function addM(t) {
-        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false }, Req: [], Branch: {} } });
+        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false, NOSTUN: false, INV: false }, Req: [], Branch: {} } });
         selectM(moves.length - 1);
     }
 
-    function selectM(i) { selM = i; selB = null; render(); }
+    function selectM(i) { 
+        selM = i; 
+        expandedBlock = null; 
+        render(); 
+    }
+
+    function toggleBlock(bi) {
+        if (expandedBlock === bi) {
+            expandedBlock = null; // collapse
+        } else {
+            expandedBlock = bi; // expand
+        }
+        render();
+    }
 
     function addBlock(key, data) {
         if(selM === null) return;
         moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
+        expandedBlock = moves[selM].DATA.Line.length - 1; // Auto-expand new block
         render();
     }
 
@@ -193,16 +212,23 @@
         if(confirm("Delete this move?")) {
             moves.splice(i, 1);
             selM = null;
-            selB = null;
+            expandedBlock = null;
             render();
         }
+    }
+
+    function deleteBlock(bi, e) {
+        e.stopPropagation();
+        moves[selM].DATA.Line.splice(bi, 1);
+        if (expandedBlock === bi) expandedBlock = null;
+        render();
     }
 
     function clearWS() {
         if(confirm("Clear entire workspace? Cannot undo.")) {
             moves = [];
             selM = null;
-            selB = null;
+            expandedBlock = null;
             render();
         }
     }
@@ -218,104 +244,177 @@
         ws.innerHTML = moves.map((m, i) => `
             <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME)}</strong>
-                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME}</span>
+                    <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME || 'Unnamed')}</strong>
+                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME} | KEY: ${m.KEY || '-'}</span>
                 </div>
                 <div style="display:flex; gap:5px; margin-top:8px;">
                     <span style="font-size:9px; color:#8b949e; flex:1;">${m.DATA.Line.length} block(s)</span>
                     <span style="color:var(--danger); cursor:pointer; font-size:11px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕ Delete</span>
                 </div>
-                <div>
-                    ${m.DATA.Line.map((b, bi) => `
-                        <div class="block-row" onclick="event.stopPropagation(); selM=${i}; selB=${bi}; renderInspector();">
-                            <span>${escapeHtml(b.K_NAME)}</span>
-                            <span style="color:var(--danger); cursor:pointer;" onclick="event.stopPropagation(); moves[${i}].DATA.Line.splice(${bi},1); render();" title="Delete block">✕</span>
+                <div style="margin-top: 10px;">
+                    ${m.DATA.Line.map((b, bi) => {
+                        const isExpanded = expandedBlock === bi && selM === i;
+                        return `
+                        <div class="block-row ${isExpanded ? 'expanded' : ''}">
+                            <div class="block-row-header" onclick="event.stopPropagation(); selM=${i}; toggleBlock(${bi});">
+                                <span><strong>${bi+1}.</strong> ${escapeHtml(b.K_NAME)}</span>
+                                <div>
+                                    <span style="font-size:10px; color:#8b949e; margin-right:8px;">${isExpanded ? '▼' : '▶'}</span>
+                                    <span style="color:var(--danger); cursor:pointer;" onclick="deleteBlock(${bi}, event)" title="Delete block">✕</span>
+                                </div>
+                            </div>
+                            <div class="block-settings">
+                                <div class="settings-grid">
+                                    ${Object.keys(b).filter(k => k !== 'K_NAME').map(k => {
+                                        const val = b[k];
+                                        const safeVal = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : String(val);
+                                        const safeValEsc = escapeHtml(safeVal);
+                                        
+                                        if(typeof val === 'boolean') {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <select onchange="upd(${bi}, '${k}', this.value === 'true')">
+                                                    <option value="true" ${val?'selected':''}>True</option>
+                                                    <option value="false" ${!val?'selected':''}>False</option>
+                                                </select>
+                                            `;
+                                        } else {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <input type="text" value="${safeValEsc}" onchange="upd(${bi}, '${k}', this.value)">
+                                            `;
+                                        }
+                                    }).join('')}
+                                </div>
+                            </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             </div>
         `).join('');
+        
         renderInspector();
     }
 
     function renderInspector() {
         const ins = document.getElementById('ins-content');
         if (selM === null) {
-            ins.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:40px;">Select a move or block</p>';
+            ins.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>';
             return;
         }
         const m = moves[selM];
+        // Only Move Properties go here now.
+        ins.innerHTML = `
+            <label>Move Name</label>
+            <input value="${escapeHtml(m.NAME || '')}" onchange="moves[selM].NAME=this.value; render()">
+            
+            <label>Move Type (K_NAME)</label>
+            <select onchange="moves[selM].K_NAME=this.value; render()">
+                <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
+                <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
+                <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
+                <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
+                <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
+                <option ${m.K_NAME=='AWAKENING'?'selected':''}>AWAKENING</option>
+            </select>
+            
+            <label>Cooldown</label>
+            <input type="number" value="${m.COOLDOWN || 0}" onchange="moves[selM].COOLDOWN=Number(this.value); render()">
+            
+            <label>Input Key (ID)</label>
+            <input type="number" value="${m.KEY || 1}" onchange="moves[selM].KEY=Number(this.value); render()">
+            
+            <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+            
+            <h4 style="margin:0 0 10px 0; color:var(--accent); font-size:12px;">Boolean Props</h4>
+            ${['USE', 'AWK', 'AWK2', 'NOCANCEL', 'NOSTUN', 'INV'].map(prop => `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="margin:0;">${prop}</label>
+                    <select style="width:60px; padding:4px; margin:0;" onchange="updateProp('${prop}', this.value === 'true')">
+                        <option value="true" ${(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>True</option>
+                        <option value="false" ${!(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>False</option>
+                    </select>
+                </div>
+            `).join('')}
+        `;
+    }
 
-        if (selB !== null) {
-            const b = m.DATA.Line[selB];
-            let h = `<h3 style="margin:0 0 15px 0; color:var(--accent);">${escapeHtml(b.K_NAME)}</h3>`;
-            for(let k in b) {
-                if(k === 'K_NAME') continue;
-                h += `<label>${k.replace(/_/g, ' ')}</label>`;
-                if(typeof b[k] === 'boolean') {
-                    h += `<select onchange="upd('${k}', this.value === 'true')"><option value="true" ${b[k]?'selected':''}>True</option><option value="false" ${!b[k]?'selected':''}>False</option></select>`;
-                } else {
-                    h += `<input value="${escapeHtml(String(b[k]))}" oninput="upd('${k}', this.value)">`;
+    function updateProp(prop, val) {
+        if (!moves[selM].DATA.Prop) moves[selM].DATA.Prop = {};
+        moves[selM].DATA.Prop[prop] = val;
+    }
+
+    // Update block specific fields. Uses `onchange` so it only fires when clicking away.
+    function upd(bi, k, v) {
+        let val = v;
+        if (typeof v !== 'boolean') {
+            // Attempt to parse arrays/objects like "[0, 15]"
+            try {
+                if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
+                    val = JSON.parse(v);
+                } else if (!isNaN(v) && v.trim() !== "") {
+                    val = Number(v);
                 }
+            } catch(e) {
+                // Keep as string if parsing fails
             }
-            ins.innerHTML = h;
-        } else {
-            ins.innerHTML = `
-                <label>Move Name</label><input value="${escapeHtml(m.NAME)}" oninput="moves[selM].NAME=this.value; render()">
-                <label>Move Type (K_NAME)</label>
-                <select onchange="moves[selM].K_NAME=this.value; render()">
-                    <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
-                    <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
-                    <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
-                    <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
-                    <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
-                    <option ${m.K_NAME=='AWK'?'selected':''}>AWK</option>
-                </select>
-                <label>Cooldown</label><input type="number" value="${m.COOLDOWN}" oninput="moves[selM].COOLDOWN=Number(this.value)">
-                <label>Input Key (ID)</label><input type="number" value="${m.KEY}" oninput="moves[selM].KEY=Number(this.value)">
-                <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
-                <label>Prop: USE</label><select onchange="moves[selM].DATA.Prop.USE=(this.value==='true')"><option value="true" ${m.DATA.Prop.USE?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.USE?'selected':''}>False</option></select>
-                <label>Prop: AWK</label><select onchange="moves[selM].DATA.Prop.AWK=(this.value==='true')"><option value="true" ${m.DATA.Prop.AWK?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.AWK?'selected':''}>False</option></select>
-                <label>Prop: NOCANCEL</label><select onchange="moves[selM].DATA.Prop.NOCANCEL=(this.value==='true')"><option value="true" ${m.DATA.Prop.NOCANCEL?'selected':''}>True</option><option value="false" ${!m.DATA.Prop.NOCANCEL?'selected':''}>False</option></select>
+        }
+        moves[selM].DATA.Line[bi][k] = val;
+        // Do not force render() here so we don't disrupt user flow, it's saved in state.
+    }
+
+    async function fetchAsset() {
+        const id = document.getElementById('searchIn').value.trim();
+        if(!id || isNaN(id)) {
+            alert("Please enter a valid numeric Asset ID.");
+            return;
+        }
+        
+        const box = document.getElementById('searchRes');
+        box.style.display = 'block'; 
+        box.innerHTML = "<div style='color:var(--accent); font-size:12px;'>Fetching details...</div>";
+        
+        try {
+            // Fetch asset details via economy proxy
+            const res = await fetch(`https://economy.roproxy.com/v2/assets/${id}/details`);
+            const data = await res.json();
+            
+            let name = data.Name || "Unknown Asset";
+            let type = data.AssetTypeId || "Unknown Type";
+            let typeName = getTypeName(type);
+            
+            // Build Thumbnail URL
+            let thumbUrl = `https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`;
+            
+            let html = `
+                <img src="${thumbUrl}" class="preview-img" onerror="this.style.display='none'">
+                <div style="font-size:13px; font-weight:bold; margin-bottom:4px;">${escapeHtml(name)}</div>
+                <div style="font-size:10px; color:#8b949e; margin-bottom:10px;">Type: ${typeName}</div>
+                
+                <div style="display:flex; gap:5px;">
+                    <button class="btn primary" style="flex:1;" onclick="navigator.clipboard.writeText('${id}'); alert('Copied ID: ${id}')">Copy ID</button>
+            `;
+            
+            // Helpful note/button for meshes or decals
+            if (type === 13 || type === 1) { // Decal / Image
+                html += `<button class="btn" style="flex:1;" onclick="navigator.clipboard.writeText('${id-1}'); alert('Copied Texture ID (ID-1): ${id-1}\\nNote: If this doesn\\'t work, try grabbing it directly from Studio.')">Copy Image ID</button>`;
+            }
+            
+            html += `</div>`;
+            box.innerHTML = html;
+
+        } catch(e) { 
+            box.innerHTML = `
+                <div style='color:var(--danger); font-size:11px; margin-bottom:5px;'>Could not fetch API details.</div>
+                <img src="https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false" class="preview-img" onerror="this.style.display='none'">
+                <button class="btn primary" style="width:100%;" onclick="navigator.clipboard.writeText('${id}'); alert('Copied ID: ${id}')">Copy ID Anyway</button>
             `;
         }
     }
 
-    function upd(k, v) {
-        let val = v;
-        if(!isNaN(v) && v.trim() !== "" && typeof v !== 'boolean') val = Number(v);
-        moves[selM].DATA.Line[selB][k] = val;
-    }
-
-    async function searchRoblox() {
-        const q = document.getElementById('searchIn').value.trim();
-        if(!q) return;
-        
-        const box = document.getElementById('searchRes');
-        box.style.display = 'block'; 
-        box.innerHTML = "<div style='padding:10px; color:var(--accent);'>Searching...</div>";
-        
-        try {
-            const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
-            const json = await res.json();
-            if (json.data && json.data.length > 0) {
-                box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: ${i.id}')" title="Click to copy ID">${escapeHtml(i.name)} (${i.id})</div>`).join('');
-            } else {
-                box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
-            }
-        } catch(e) { 
-            try {
-                const res = await fetch(`https://api.codetabs.com/v1/proxy?quest=https://catalog.roblox.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
-                const json = await res.json();
-                if(json.data && json.data.length > 0) {
-                    box.innerHTML = json.data.map(i => `<div class="res-item" onclick="navigator.clipboard.writeText('${i.id}'); alert('ID Copied: ${i.id}')" title="Click to copy ID">${escapeHtml(i.name)} (${i.id})</div>`).join('');
-                } else {
-                    box.innerHTML = "<div style='padding:10px;'>No items found.</div>";
-                }
-            } catch(err) {
-                box.innerHTML = "<div style='padding:10px; color:var(--danger);'>Network blocked. Try manual ID entry.</div>"; 
-            }
-        }
+    function getTypeName(typeId) {
+        const types = { 1: "Image", 3: "Audio", 4: "Mesh", 9: "Place", 13: "Decal", 24: "Animation", 40: "MeshPart" };
+        return types[typeId] || `Asset Type ${typeId}`;
     }
 
     function autoSave() {
@@ -362,7 +461,7 @@
             const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bytes));
             moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
             selM = null;
-            selB = null;
+            expandedBlock = null;
             render();
             alert("✓ Moveset imported successfully!");
         } catch(e) { alert("Import failed. Check that the Zstd string is valid.\n" + e.message); }
