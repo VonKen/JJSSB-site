@@ -33,7 +33,7 @@
 
         .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); flex-shrink: 0; }
         
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; }
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; text-align: center;}
         .btn:hover { background: #30363d; border-color: #8b949e; }
         .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -83,15 +83,15 @@
     <div class="sidebar-content">
         <label>Roblox Toolbox Search</label>
         <div style="display:flex; gap:5px; margin-bottom:5px;">
-            <select id="assetTypeSearch" style="margin:0; width:45%;">
-                <option value="Audio">Audio</option>
-                <option value="Decals">Decals</option>
-                <option value="Meshes">Meshes</option>
-                <option value="Animations">Animations</option>
+            <select id="assetTypeSearch" style="margin:0; width:45%; padding:8px;">
+                <option value="FreeAudio">Audio</option>
+                <option value="FreeDecals">Decals</option>
+                <option value="FreeMeshes">Meshes</option>
+                <option value="FreeModels">Models</option>
             </select>
-            <input id="searchIn" placeholder="Keyword..." style="margin:0; flex:1;" onkeypress="if(event.key==='Enter') searchRoblox()">
+            <input id="searchIn" placeholder="Keyword..." style="margin:0; flex:1; padding:8px;" onkeypress="if(event.key==='Enter') searchRoblox()">
         </div>
-        <button onclick="searchRoblox()" class="btn primary" style="width:100%; margin-bottom:10px;" title="Search Roblox toolbox">SEARCH TOOLBOX</button>
+        <button onclick="searchRoblox()" class="btn primary" style="width:100%; margin-bottom:10px;" title="Search Roblox toolbox API">SEARCH TOOLBOX</button>
         <div id="searchRes"></div>
 
         <label>Add New Move</label>
@@ -134,10 +134,11 @@
     let selBranch = null; // null means "Main Line"
     let expandedBlock = null;
 
+    // FULL ARSENAL derived exactly from the provided JSON files
     const library = {
         "Combat": {
-            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false },
-            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false },
+            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
+            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false, "360_BLOCK": false, HIT_USER: false, PROJECTILE_TAG: "", BRANCH: "", BRANCH_TARGET: "", CONTINUE: false, FILTER_INTERVAL: 1, AIM_LAST_HIT: -1 },
             COUNTER: { TIME: 0.5, STUN: 1, BRANCH: "hit", ATTACK_TYPE2: "Melee,Bullet,Swarm,Explosion,Domain", REMOVE_ON_HIT: true, CANCEL_ENEMY: true },
             GRAB: { TIME: 1, BODY_PART: "HumanoidRootPart", BODY_PART2: "HumanoidRootPart", POSITION: "0, 0, 4", ROTATION: "0, 180, 0", LAST_HIT: 1 },
             ULTGIB: { AMOUNT: 20 },
@@ -155,7 +156,7 @@
         "Visual/Audio": {
             ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.2, LOOPED: false, PREVIEW: "[0,1]", LAST_HIT: -1 },
             SFX: { ID: "0", VOLUME: 2, SPEED: 1, START: 0, CANCEL: false, END: 500, GLOBAL: false },
-            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, EASING_STYLE: "Linear", BODY_PART: "HumanoidRootPart" }
+            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, ROTATION: "0, 0, 0", ALT_ROTATION: "0, 0, 0", EASING_STYLE: "Linear", EASING_DIRECTION: "In", BODY_PART: "HumanoidRootPart", AMOUNT: 1, LAST_HIT: -1, CANCEL_ON_INTERRUPT: false, TEXTURE: 0, RUN_ON_SERVER: false }
         },
         "Motion": {
             VELO: { FORCE: "0, 0, 50", TIME: 0.2, FADE: true, TRACK: false, RAGDOLL: 0, TRUE_RAGDOLL: false, LAST_HIT: -1 }
@@ -206,17 +207,22 @@
     function addBranch() {
         const name = prompt("Enter new branch name (e.g., 'hit', 'endlag'):");
         if(name && name.trim() !== "") {
-            const cleanName = name.trim();
-            if(!moves[selM].DATA.Branch) moves[selM].DATA.Branch = {};
-            if(!moves[selM].DATA.Branch[cleanName]) {
-                moves[selM].DATA.Branch[cleanName] = { Req: [], Line: [] };
-            }
-            selBranch = cleanName;
-            expandedBlock = null;
-            render();
-            autoSave();
+            window.goToBranch(name);
         }
     }
+
+    window.goToBranch = function(bName) {
+        if (!bName || bName.trim() === "") return;
+        const cleanName = bName.trim();
+        if (!moves[selM].DATA.Branch) moves[selM].DATA.Branch = {};
+        if (!moves[selM].DATA.Branch[cleanName]) {
+            moves[selM].DATA.Branch[cleanName] = { Req: [], Line: [] };
+        }
+        selBranch = cleanName;
+        expandedBlock = null;
+        render();
+        autoSave();
+    };
 
     function toggleBlock(bi) {
         expandedBlock = (expandedBlock === bi) ? null : bi;
@@ -277,7 +283,7 @@
             if (isActiveMove) {
                 activeLine = selBranch === null ? m.DATA.Line : (m.DATA.Branch && m.DATA.Branch[selBranch] ? m.DATA.Branch[selBranch].Line : []);
             } else {
-                activeLine = m.DATA.Line; // Just for counting preview on inactive
+                activeLine = m.DATA.Line;
             }
 
             return `
@@ -320,6 +326,17 @@
                                         const safeVal = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : String(val);
                                         const safeValEsc = escapeHtml(safeVal);
                                         
+                                        // Quick Jump Button for Branches
+                                        if (k.toUpperCase().includes('BRANCH')) {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <div style="display:flex; gap:5px; align-items:center;">
+                                                    <input type="text" id="input-${bi}-${k}" value="${safeValEsc}" onchange="upd(${bi}, '${k}', this.value)" style="flex:1; margin:0; padding:6px;">
+                                                    <button class="btn primary" style="margin:0; padding:6px 10px;" onclick="goToBranch(document.getElementById('input-${bi}-${k}').value)" title="Go to or create this branch">Edit</button>
+                                                </div>
+                                            `;
+                                        }
+
                                         if(typeof val === 'boolean') {
                                             return `
                                                 <label>${k.replace(/_/g, ' ')}</label>
@@ -419,46 +436,51 @@
         
         const box = document.getElementById('searchRes');
         box.style.display = 'block'; 
-        box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Toolbox...</div>";
+        box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Toolbox API...</div>";
         
         try {
-            // Using official Roblox API via RoProxy: Creator Store API (v1)
-            const url = `https://apis.roproxy.com/toolbox-service/v1/creations?query=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&limit=10`;
+            const url = `https://apis.roproxy.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`;
             const res = await fetch(url);
             const json = await res.json();
             
             if (json.data && json.data.length > 0) {
-                renderResults(json.data.map(i => ({ id: i.asset.id, name: i.asset.name })), type, box);
+                renderResults(json.data, type, box);
             } else {
                 box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found in this category.</div>";
             }
         } catch(e) { 
-            // Fallback to Catalog Search API if toolbox endpoint fails
-            try {
-                const res = await fetch(`https://catalog.roproxy.com/v1/search/items/details?keyword=${encodeURIComponent(q)}&limit=10`);
-                const json = await res.json();
-                if(json.data && json.data.length > 0) {
-                    renderResults(json.data.map(i => ({ id: i.id, name: i.name })), type, box);
-                } else {
-                    box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found.</div>";
-                }
-            } catch(err) {
-                box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked. Try manual ID entry.</div>"; 
-            }
+            box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked or Proxy is down.</div>"; 
         }
     }
 
     function renderResults(items, type, box) {
-        box.innerHTML = items.map(a => {
+        box.innerHTML = items.map(i => {
+            const a = i.asset;
+            const c = i.creator;
             let thumb = `https://thumbnails.roproxy.com/v1/assets?assetIds=${a.id}&returnPolicy=PlaceHolder&size=150x150&format=Png`;
+            
+            let buttons = `<button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')">Copy ID</button>`;
+            
+            if (type === 'FreeMeshes' || type === 'FreeModels') {
+                buttons = `
+                    <button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')" title="Copy Mesh ID">Mesh ID</button>
+                    <button class="btn" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Often the Texture ID is just ID-1">Tex ID (-1)</button>
+                `;
+            } else if (type === 'FreeDecals') {
+                buttons = `
+                    <button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')" title="Copy Decal ID">Decal ID</button>
+                    <button class="btn" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Often the Image ID is just ID-1">Img ID (-1)</button>
+                `;
+            }
+
             return `
                 <div style="display:flex; gap:10px; margin-bottom:10px; padding:8px; border:1px solid var(--border); border-radius:6px; background:#1c2128;">
                     <img src="${thumb}" style="width:40px; height:40px; border-radius:4px; object-fit:cover; background:#000;" onerror="this.src=''">
-                    <div style="flex:1; min-width:0;">
+                    <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
                         <div style="font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
-                        <div style="display:flex; gap:5px; margin-top:5px;">
-                            <button class="btn primary" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')">ID</button>
-                            ${(type === 'Decals' || type === 'Meshes') ? `<button class="btn" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Try ID-1 for Texture variant">-1</button>` : ''}
+                        <div style="font-size:9px; color:#8b949e; margin-bottom:5px;">By ${escapeHtml(c.name)}</div>
+                        <div style="display:flex; gap:5px;">
+                            ${buttons}
                         </div>
                     </div>
                 </div>
