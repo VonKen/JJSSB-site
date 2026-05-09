@@ -60,7 +60,7 @@
         .settings-grid label { margin: 0; }
         .settings-grid input, .settings-grid select { margin-bottom: 0; padding: 6px; }
 
-        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: none; margin-bottom: 10px; max-height: 400px; overflow-y: auto; }
+        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 5px; display: none; margin-bottom: 10px; max-height: 400px; overflow-y: auto; }
         .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
 
         @media (max-width: 900px) {
@@ -81,19 +81,16 @@
         <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression status">ZSTD: LOADING</div>
     </div>
     <div class="sidebar-content">
-        <label>Roblox Store Search</label>
+        <label>Roblox Asset Lookup</label>
         <div style="display:flex; gap:5px; margin-bottom:5px;">
-            <select id="assetTypeSearch" style="margin:0; width:40%; padding:8px;">
-                <option value="Accessories">Accessories</option>
-                <option value="Animations">Animations</option>
-                <option value="FreeMeshes">Meshes</option>
-                <option value="FreeDecals">Decals</option>
-                <option value="FreeAudio">Audio</option>
-                <option value="FreeModels">Models</option>
+            <select id="assetTypeSearch" style="margin:0; width:45%; padding:8px;">
+                <option value="All">All</option>
+                <option value="11">Accessories</option>
+                <option value="12">Animations</option>
             </select>
-            <input id="searchIn" placeholder="Keyword..." style="margin:0; flex:1; padding:8px;" onkeypress="if(event.key==='Enter') startSearch()">
+            <input id="searchIn" placeholder="Keyword..." style="margin:0; flex:1; padding:8px;" onkeypress="if(event.key==='Enter') executeSearch()">
         </div>
-        <button onclick="startSearch()" class="btn primary" style="width:100%; margin-bottom:10px;" title="Search Roblox Database">SEARCH</button>
+        <button onclick="executeSearch()" class="btn primary" style="width:100%; margin-bottom:10px;" title="Search Roblox Catalog">SEARCH CATALOG</button>
         <div id="searchRes"></div>
 
         <label>Add New Move</label>
@@ -328,6 +325,17 @@
                                         const safeVal = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : String(val);
                                         const safeValEsc = escapeHtml(safeVal);
                                         
+                                        // Quick Jump Button for Branches
+                                        if (k.toUpperCase().includes('BRANCH')) {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <div style="display:flex; gap:5px; align-items:center;">
+                                                    <input type="text" id="input-${bi}-${k}" value="${safeValEsc}" onchange="upd(${bi}, '${k}', this.value)" style="flex:1; margin:0; padding:6px;">
+                                                    <button class="btn primary" style="margin:0; padding:6px 10px;" onclick="goToBranch(document.getElementById('input-${bi}-${k}').value)" title="Go to or create this branch">Edit</button>
+                                                </div>
+                                            `;
+                                        }
+
                                         if(typeof val === 'boolean') {
                                             return `
                                                 <label>${k.replace(/_/g, ' ')}</label>
@@ -426,94 +434,50 @@
     let currentQuery = "";
     let currentType = "";
 
-    window.startSearch = function() {
-        currentCursor = "";
-        previousCursor = "";
+    window.executeSearch = async function(cursorOverride = "") {
         currentQuery = document.getElementById('searchIn').value.trim();
         currentType = document.getElementById('assetTypeSearch').value;
         if(!currentQuery) return;
-        executeSearch();
-    }
-
-    window.executeSearch = async function(cursorOverride = "") {
+        
         const box = document.getElementById('searchRes');
         box.style.display = 'block'; 
-        box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Database...</div>";
+        box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Catalog...</div>";
         
         try {
-            let items = [];
-            let nextCursor = null;
-            let prevCursor = null;
+            let url = `https://catalog.roproxy.com/v1/search/items/details?Category=${currentType}&Keyword=${encodeURIComponent(currentQuery)}&Limit=10`;
+            if (cursorOverride) url += `&Cursor=${cursorOverride}`;
 
-            if (currentType === "Accessories" || currentType === "Animations") {
-                // CATALOG API (For Avatar items)
-                let catId = currentType === "Accessories" ? 11 : 12;
-                let url = `https://catalog.roproxy.com/v1/search/items/details?Category=${catId}&Keyword=${encodeURIComponent(currentQuery)}&Limit=10`;
-                if (cursorOverride) url += `&Cursor=${cursorOverride}`;
-                
-                const res = await fetch(url);
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            if (json.data && json.data.length > 0) {
+                renderResults(json.data.map(i => ({
+                    id: i.id,
+                    name: i.name,
+                    creator: i.creatorName || "Roblox"
+                })), currentType, box, json.nextPageCursor, json.previousPageCursor);
+            } else {
+                box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found.</div>";
+            }
+        } catch(e) { 
+            try {
+                let url2 = `https://api.codetabs.com/v1/proxy?quest=https://catalog.roblox.com/v1/search/items/details?Category=${currentType}&Keyword=${encodeURIComponent(currentQuery)}&Limit=10`;
+                if (cursorOverride) url2 += `&Cursor=${cursorOverride}`;
+
+                const res = await fetch(url2);
                 const json = await res.json();
-                
-                if (json.data) {
-                    items = json.data.map(i => ({
+                if(json.data && json.data.length > 0) {
+                    renderResults(json.data.map(i => ({
                         id: i.id,
                         name: i.name,
                         creator: i.creatorName || "Roblox"
-                    }));
-                    nextCursor = json.nextPageCursor;
-                    prevCursor = json.previousPageCursor;
+                    })), currentType, box, json.nextPageCursor, json.previousPageCursor);
+                } else {
+                    box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found.</div>";
                 }
-            } else {
-                // TOOLBOX API (For Meshes, Decals, Audio, Models)
-                let url = `https://apis.roblox.com/toolbox-service/v1/items?categoryName=${currentType}&keyword=${encodeURIComponent(currentQuery)}&limit=10`;
-                if (cursorOverride) url += `&cursor=${cursorOverride}`;
-                
-                // Multi-proxy fallback to bypass Roblox blocking
-                let success = false;
-                const proxies = [
-                    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
-                ];
-
-                for (let proxy of proxies) {
-                    try {
-                        const res = await fetch(proxy);
-                        if (!res.ok) continue;
-                        
-                        let textData = await res.text();
-                        let json;
-                        // AllOrigins wraps it in a 'contents' field
-                        if (proxy.includes('allorigins')) {
-                            const wrapper = JSON.parse(textData);
-                            json = JSON.parse(wrapper.contents);
-                        } else {
-                            json = JSON.parse(textData);
-                        }
-
-                        if (json.data) {
-                            items = json.data.map(i => ({
-                                id: i.asset.id,
-                                name: i.asset.name,
-                                creator: i.creator ? i.creator.name : "Roblox"
-                            }));
-                            nextCursor = json.nextPageCursor;
-                            prevCursor = json.previousPageCursor;
-                            success = true;
-                            break;
-                        }
-                    } catch(e) { console.warn("Proxy failed, trying next..."); }
-                }
-
-                if (!success) throw new Error("All proxies failed.");
+            } catch(err) {
+                box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked. Try manual ID entry.</div>"; 
             }
-
-            if (items.length > 0) {
-                renderResults(items, currentType, box, nextCursor, prevCursor);
-            } else {
-                box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found for this search.</div>";
-            }
-        } catch(e) { 
-            box.innerHTML = "<div style='padding:10px; font-size:11px; color:var(--danger);'>Network blocked. Roblox is preventing the search proxy.</div>"; 
         }
     }
 
@@ -523,18 +487,6 @@
             
             let buttons = `<button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')">Copy ID</button>`;
             
-            if (type === 'FreeMeshes' || type === 'FreeModels') {
-                buttons = `
-                    <button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')" title="Copy Mesh ID">Mesh ID</button>
-                    <button class="btn" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Often the Texture ID is just ID-1">Tex ID (-1)</button>
-                `;
-            } else if (type === 'FreeDecals') {
-                buttons = `
-                    <button class="btn primary" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')" title="Copy Decal ID">Decal ID</button>
-                    <button class="btn" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Often the Image ID is just ID-1">Img ID (-1)</button>
-                `;
-            }
-
             return `
                 <div style="display:flex; gap:10px; margin-bottom:10px; padding:8px; border:1px solid var(--border); border-radius:6px; background:#1c2128;">
                     <img src="${thumb}" style="width:40px; height:40px; border-radius:4px; object-fit:cover; background:#000;" onerror="this.src=''">
@@ -543,6 +495,7 @@
                         <div style="font-size:9px; color:#8b949e; margin-bottom:5px;">By ${escapeHtml(a.creator)}</div>
                         <div style="display:flex; gap:5px;">
                             ${buttons}
+                            <button class="btn" style="padding:4px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Often the Texture/Image ID is just ID-1">ID-1</button>
                         </div>
                     </div>
                 </div>
