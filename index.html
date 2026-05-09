@@ -33,7 +33,7 @@
 
         .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); flex-shrink: 0; }
         
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; text-align: center;}
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; }
         .btn:hover { background: #30363d; border-color: #8b949e; }
         .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -136,8 +136,8 @@
 
     const library = {
         "Combat": {
-            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
-            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false, "360_BLOCK": false, HIT_USER: false, PROJECTILE_TAG: "", BRANCH: "", BRANCH_TARGET: "", CONTINUE: false, FILTER_INTERVAL: 1, AIM_LAST_HIT: -1 },
+            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false },
+            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false },
             COUNTER: { TIME: 0.5, STUN: 1, BRANCH: "hit", ATTACK_TYPE2: "Melee,Bullet,Swarm,Explosion,Domain", REMOVE_ON_HIT: true, CANCEL_ENEMY: true },
             GRAB: { TIME: 1, BODY_PART: "HumanoidRootPart", BODY_PART2: "HumanoidRootPart", POSITION: "0, 0, 4", ROTATION: "0, 180, 0", LAST_HIT: 1 },
             ULTGIB: { AMOUNT: 20 },
@@ -155,7 +155,7 @@
         "Visual/Audio": {
             ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.2, LOOPED: false, PREVIEW: "[0,1]", LAST_HIT: -1 },
             SFX: { ID: "0", VOLUME: 2, SPEED: 1, START: 0, CANCEL: false, END: 500, GLOBAL: false },
-            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, ROTATION: "0, 0, 0", ALT_ROTATION: "0, 0, 0", EASING_STYLE: "Linear", EASING_DIRECTION: "In", BODY_PART: "HumanoidRootPart", AMOUNT: 1, LAST_HIT: -1, CANCEL_ON_INTERRUPT: false, TEXTURE: 0, RUN_ON_SERVER: false }
+            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, EASING_STYLE: "Linear", BODY_PART: "HumanoidRootPart" }
         },
         "Motion": {
             VELO: { FORCE: "0, 0, 50", TIME: 0.2, FADE: true, TRACK: false, RAGDOLL: 0, TRUE_RAGDOLL: false, LAST_HIT: -1 }
@@ -422,8 +422,8 @@
         box.innerHTML = "<div style='color:var(--accent); font-size:12px; padding:10px;'>Searching Toolbox...</div>";
         
         try {
-            // Toolbox API via RoProxy
-            const url = `https://apis.roproxy.com/toolbox-service/v1/items?categoryName=${type}&keyword=${encodeURIComponent(q)}&limit=10`;
+            // Using official Roblox API via RoProxy: Creator Store API (v1)
+            const url = `https://apis.roproxy.com/toolbox-service/v1/creations?query=${encodeURIComponent(q)}&type=${encodeURIComponent(type)}&limit=10`;
             const res = await fetch(url);
             const json = await res.json();
             
@@ -433,9 +433,9 @@
                 box.innerHTML = "<div style='padding:10px; font-size:11px;'>No items found in this category.</div>";
             }
         } catch(e) { 
-            // Fallback to Catalog Search if toolbox endpoint is blocked/down
+            // Fallback to Catalog Search API if toolbox endpoint fails
             try {
-                const res = await fetch(`https://catalog.roproxy.com/v1/search/items?category=All&keyword=${encodeURIComponent(q)}&limit=10`);
+                const res = await fetch(`https://catalog.roproxy.com/v1/search/items/details?keyword=${encodeURIComponent(q)}&limit=10`);
                 const json = await res.json();
                 if(json.data && json.data.length > 0) {
                     renderResults(json.data.map(i => ({ id: i.id, name: i.name })), type, box);
@@ -458,7 +458,7 @@
                         <div style="font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
                         <div style="display:flex; gap:5px; margin-top:5px;">
                             <button class="btn primary" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id}')">ID</button>
-                            ${(type === 'Decals' || type === 'Meshes') ? `<button class="btn" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Try ID-1 for Texture/Mesh ID">ID-1</button>` : ''}
+                            ${(type === 'Decals' || type === 'Meshes') ? `<button class="btn" style="padding:3px 6px; font-size:9px; flex:1;" onclick="copyID('${a.id - 1}')" title="Try ID-1 for Texture variant">-1</button>` : ''}
                         </div>
                     </div>
                 </div>
