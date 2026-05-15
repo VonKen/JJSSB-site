@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Moveset Builder Ultra V3.8</title>
+    <title>Moveset Builder Ultra V3.6</title>
     <script type="module">
         import { Zstd } from "https://esm.sh/@hpcc-js/wasm-zstd@1.12.5?bundle";
         try {
@@ -12,6 +12,7 @@
             const el = document.getElementById('z-status');
             if (el) { el.innerText = 'ZSTD READY'; el.style.background = '#238636'; }
         } catch(e) {
+            console.error("Zstd load failed:", e);
             const el = document.getElementById('z-status');
             if (el) { el.innerText = 'ZSTD FAILED'; el.style.background = '#da3633'; }
         }
@@ -21,31 +22,169 @@
             --bg: #0d1117; --side: #161b22; --border: #30363d;
             --accent: #58a6ff; --text: #c9d1d9; --bright: #f0f6fc; --danger: #f85149;
         }
-        * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
+        * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
 
-        .sidebar { width: 320px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-        .sidebar-content { padding: 15px; overflow-y: auto; flex: 1; }
-        .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); }
+        .sidebar { width: 280px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-content { padding: 15px; overflow-y: auto; flex: 1; min-height: 0; }
+        
+        .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); min-width: 0; }
         .inspector { width: 280px; background: var(--side); padding: 15px; overflow-y: auto; flex-shrink: 0; }
 
         .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); flex-shrink: 0; }
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; }
+        
+        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; text-align: center;}
         .btn:hover { background: #30363d; border-color: #8b949e; }
         .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
-        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 4px; }
+        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
+        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; margin-top: 5px; }
 
-        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 15px; border-left: 4px solid transparent; }
-        .move-card.active { border-left-color: var(--accent); background: #1c2128; }
+        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid transparent; transition: all 0.15s; }
+        .move-card.active { border-left-color: var(--accent); background: #1c2128; border-color:#484f58; }
         
-        #searchRes { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 5px; display: none; margin-bottom: 10px; max-height: 400px; overflow-y: auto; }
-        .res-card { display: flex; gap: 10px; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: #1c2128; }
+        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; font-size: 12px; transition: all 0.15s; }
+        .block-row-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .block-row:hover { border-color: #484f58; }
+        .block-row.expanded { border-color: var(--accent); background: #161b22; }
         
+        .block-settings { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: none; }
+        .block-row.expanded .block-settings { display: block; }
+        
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; align-items: center;}
+        .settings-grid label { margin: 0; }
+        .settings-grid input, .settings-grid select { margin-bottom: 0; padding: 6px; }
+
+        /* ── ASSET SEARCH ── */
+        #assetSearch { margin-bottom: 12px; }
+
+        #assetTypeRow { display: flex; gap: 5px; margin-bottom: 8px; }
+        #assetTypeRow select { margin-bottom: 0; flex: 1; }
+
+        #assetQueryRow { display: flex; gap: 5px; margin-bottom: 8px; }
+        #assetQueryRow input { margin-bottom: 0; flex: 1; }
+        #assetQueryRow button { flex-shrink: 0; }
+
+        #assetResults {
+            display: none;
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        #assetResultsList {
+            max-height: 340px;
+            overflow-y: auto;
+        }
+
+        .asset-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .asset-item:last-child { border-bottom: none; }
+        .asset-item:hover { background: #161b22; }
+        .asset-item.selected { background: #1c2128; border-left: 3px solid var(--accent); }
+
+        .asset-thumb {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 5px;
+            background: #21262d;
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+        }
+        .asset-thumb-placeholder {
+            width: 44px;
+            height: 44px;
+            border-radius: 5px;
+            background: #21262d;
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #484f58;
+        }
+
+        .asset-info { flex: 1; min-width: 0; }
+        .asset-name { font-size: 11px; font-weight: 700; color: var(--bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .asset-id { font-size: 10px; color: #8b949e; }
+        .asset-creator { font-size: 10px; color: #484f58; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        #assetDetail {
+            display: none;
+            padding: 10px;
+            border-top: 1px solid var(--border);
+            background: #0a0e14;
+        }
+        #assetDetailThumb {
+            width: 100%;
+            height: 100px;
+            object-fit: contain;
+            border-radius: 6px;
+            background: #21262d;
+            border: 1px solid var(--border);
+            margin-bottom: 8px;
+        }
+        #assetDetailName { font-size: 12px; font-weight: 700; color: var(--bright); margin-bottom: 2px; }
+        #assetDetailMeta { font-size: 10px; color: #8b949e; margin-bottom: 8px; }
+
+        .asset-copy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .copy-chip {
+            background: #21262d;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 5px 8px;
+            font-size: 10px;
+            cursor: pointer;
+            text-align: center;
+            color: var(--bright);
+            font-weight: 700;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .copy-chip:hover { background: #30363d; border-color: var(--accent); color: var(--accent); }
+        .copy-chip.copied { border-color: #238636; color: #56d364; background: #0f2b1a; }
+        .copy-chip span { display: block; font-size: 9px; color: #8b949e; font-weight: 400; margin-top: 1px; }
+
+        .asset-pagination {
+            display: flex;
+            gap: 5px;
+            padding: 8px 10px;
+            border-top: 1px solid var(--border);
+            background: #0a0e14;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .asset-pagination button { padding: 4px 10px; font-size: 10px; }
+        #assetPageInfo { font-size: 10px; color: #8b949e; }
+
+        .asset-status {
+            padding: 12px;
+            text-align: center;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
+
         @media (max-width: 900px) {
-            body { flex-direction: column; overflow-y: auto; display: block; }
-            .sidebar, .inspector, .canvas { width: 100%; height: auto; border: none; flex-shrink: 1; }
+            body { flex-direction: column; overflow-y: auto; height: auto; display: block; }
+            .sidebar, .inspector { width: 100%; height: auto; border: none; flex-shrink: 1; }
+            .sidebar { border-bottom: 1px solid var(--border); }
+            .sidebar-content { overflow-y: visible; padding-bottom: 30px; }
+            .canvas { width: 100%; min-height: 450px; border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; flex: none; display: block; }
+            .inspector { overflow-y: visible; padding-bottom: 30px; }
         }
     </style>
 </head>
@@ -53,145 +192,572 @@
 
 <div class="sidebar">
     <div class="header">
-        <span style="font-weight:900; color:var(--accent);">ULTRA V3.8</span>
-        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff;">ZSTD: LOADING</div>
+        <span style="font-weight:900; color:var(--accent);">ULTRA V3.6</span>
+        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression status">ZSTD: LOADING</div>
     </div>
     <div class="sidebar-content">
-        <label>Search Source</label>
-        <select id="searchSource" onchange="updateAssetTypes()">
-            <option value="creator">Creator Store (Audio, Mesh, Model)</option>
-            <option value="catalog">Marketplace (Hats, Animation, Gear)</option>
-        </select>
 
-        <label>Asset Type</label>
-        <select id="assetTypeSearch">
-            </select>
+        <!-- ═══════════════════════════════════════════════
+             ROBLOX ASSET SEARCH
+        ═══════════════════════════════════════════════ -->
+        <label>Roblox Asset Search</label>
+        <div id="assetSearch">
 
-        <div style="display:flex; gap:5px;">
-            <input id="searchIn" placeholder="Search keywords..." onkeypress="if(event.key==='Enter') executeSearch()">
-            <button onclick="executeSearch()" class="btn primary">SEARCH</button>
+            <!-- Type selector -->
+            <div id="assetTypeRow">
+                <select id="assetTypeSelect" style="margin:0;">
+                    <option value="Animation">Animation</option>
+                    <option value="Audio">Audio / SFX</option>
+                    <option value="Decal">Decal / Image</option>
+                    <option value="MeshPart" selected>MeshPart</option>
+                    <option value="Model">Model</option>
+                    <option value="Plugin">Plugin</option>
+                </select>
+            </div>
+
+            <!-- Query + search button -->
+            <div id="assetQueryRow">
+                <input id="assetQueryInput" placeholder="Search keyword…" style="margin:0;" onkeypress="if(event.key==='Enter') searchAssets(1)">
+                <button class="btn primary" onclick="searchAssets(1)">GO</button>
+            </div>
+
+            <!-- Results panel -->
+            <div id="assetResults">
+                <div id="assetStatus" class="asset-status">Enter a query and press GO.</div>
+                <div id="assetResultsList"></div>
+                <div id="assetDetail">
+                    <img id="assetDetailThumb" src="" alt="">
+                    <div id="assetDetailName"></div>
+                    <div id="assetDetailMeta"></div>
+                    <div class="asset-copy-grid" id="assetCopyGrid"></div>
+                </div>
+                <div class="asset-pagination" id="assetPagination" style="display:none;">
+                    <button class="btn" id="assetPrevBtn" onclick="searchAssets(assetPage-1)" disabled>◀ Prev</button>
+                    <span id="assetPageInfo">Page 1</span>
+                    <button class="btn" id="assetNextBtn" onclick="searchAssets(assetPage+1)">Next ▶</button>
+                </div>
+            </div>
+
         </div>
-        
-        <div id="searchRes"></div>
+        <!-- ══ END ASSET SEARCH ══ -->
 
-        <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
         <label>Add New Move</label>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;" id="moveButtons">
-            <button onclick="addM('SKILL')" class="btn">SKILL</button>
-            <button onclick="addM('MELEE')" class="btn">MELEE</button>
-            <button onclick="addM('CHASE')" class="btn">CHASE</button>
-            <button onclick="addM('ULTIMATE')" class="btn">ULT</button>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+            <button onclick="addM('SKILL')" class="btn" title="Create new SKILL move">SKILL</button>
+            <button onclick="addM('MELEE')" class="btn" title="Create new MELEE move">MELEE</button>
+            <button onclick="addM('CHASE')" class="btn" title="Create new CHASE move">CHASE</button>
+            <button onclick="addM('ULTIMATE')" class="btn" title="Create new ULTIMATE move">ULTIMATE</button>
+            <button onclick="addM('SPECIAL')" class="btn" title="Create new SPECIAL move">SPECIAL</button>
+            <button onclick="addM('AWAKENING')" class="btn" title="Create new AWAKENING move">AWK</button>
         </div>
+
+        <div id="palette"></div>
     </div>
 </div>
 
 <div class="canvas">
-    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">Workspace</h3>
         <div style="display:flex; gap:8px;">
-            <button class="btn" onclick="importZ()">Import</button>
-            <button class="btn primary" onclick="exportZ()">Export Zstd</button>
+            <button class="btn" onclick="importZ()" title="Import compressed Zstd data">Import</button>
+            <button class="btn primary" onclick="exportZ()" id="export-btn" title="Export workspace as Zstd">Export Zstd</button>
+            <button class="btn" onclick="clearWS()" title="Clear all moves (cannot undo)">Clear</button>
         </div>
     </div>
     <div id="ws"></div>
 </div>
 
 <div class="inspector">
-    <label>Properties</label>
-    <div id="ins-content"><p style="text-align:center; color:#484f58; margin-top:40px;">Select a move</p></div>
+    <label>Move Properties</label>
+    <div id="ins-content">
+        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>
+    </div>
 </div>
 
 <script>
+    window.zstdEngine = null;
     let moves = [];
     let selM = null;
+    let expandedBlock = null;
 
-    const creatorTypes = [
-        { name: "Models", id: "model" },
-        { name: "Audio", id: "audio" },
-        { name: "Meshes", id: "mesh" },
-        { name: "Decals", id: "decal" }
-    ];
+    // Asset search state
+    let assetPage = 1;
+    let assetNextCursor = null;
+    let assetCursorHistory = [null]; // index i = cursor to use to get page i+1 (null = start)
+    let assetSelectedItem = null;
 
-    const catalogTypes = [
-        { name: "All", id: "1" },
-        { name: "Accessories", id: "11" },
-        { name: "Animations", id: "12" },
-        { name: "Gear", id: "5" }
-    ];
+    // ── ASSET TYPE → Toolbox searchCategoryType mapping ──
+    // Roblox Toolbox API v2 uses these exact string values for searchCategoryType
+    const assetTypeMap = {
+        "Animation":  "Animation",
+        "Audio":      "Audio",
+        "Decal":      "Decal",
+        "MeshPart":   "MeshPart",
+        "Model":      "Model",
+        "Plugin":     "Plugin"
+    };
 
-    function updateAssetTypes() {
-        const source = document.getElementById('searchSource').value;
-        const select = document.getElementById('assetTypeSearch');
-        const types = source === 'creator' ? creatorTypes : catalogTypes;
-        select.innerHTML = types.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-    }
+    // Thumbnail icon fallbacks per type
+    const typeIcon = {
+        "Animation": "🎞️", "Audio": "🔊", "Decal": "🖼️",
+        "MeshPart": "🧱", "Model": "📦", "Plugin": "🔌"
+    };
 
-    async function executeSearch() {
-        const source = document.getElementById('searchSource').value;
-        const type = document.getElementById('assetTypeSearch').value;
-        const query = document.getElementById('searchIn').value;
-        const box = document.getElementById('searchRes');
-        
-        box.style.display = 'block';
-        box.innerHTML = "<div style='font-size:11px; padding:10px;'>Searching...</div>";
+    async function searchAssets(page) {
+        const query = document.getElementById('assetQueryInput').value.trim();
+        const typeKey = document.getElementById('assetTypeSelect').value;
+        const catType = assetTypeMap[typeKey] || "MeshPart";
 
-        let url = "";
-        if (source === 'creator') {
-            // Using Toolbox Service API for Audio/Meshes
-            url = `https://apis.roproxy.com/toolbox-service/v2/assets:search?keyword=${encodeURIComponent(query)}&assetType=${type}&limit=10`;
+        if (!query) { alert("Please enter a search keyword."); return; }
+
+        const resultsPanel = document.getElementById('assetResults');
+        const statusEl     = document.getElementById('assetStatus');
+        const listEl       = document.getElementById('assetResultsList');
+        const detailEl     = document.getElementById('assetDetail');
+        const pagEl        = document.getElementById('assetPagination');
+
+        resultsPanel.style.display = 'block';
+        detailEl.style.display = 'none';
+        assetSelectedItem = null;
+        listEl.innerHTML = '';
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = '<span style="color:var(--accent);">Searching…</span>';
+        pagEl.style.display = 'none';
+
+        // Build URL
+        // Cursor-based pagination: page 1 → no cursor, subsequent pages → cursor from previous response
+        let url = `https://apis.roblox.com/toolbox-service/v2/assets?searchCategoryType=${catType}&Query=${encodeURIComponent(query)}&limit=20`;
+
+        // Manage cursor history
+        if (page === 1) {
+            assetCursorHistory = [null];
+            assetPage = 1;
+        } else if (page > assetPage) {
+            // Going forward
+            assetPage = page;
         } else {
-            // Using Catalog API for Avatar items
-            url = `https://catalog.roproxy.com/v1/search/items/details?Category=${type}&Keyword=${encodeURIComponent(query)}&Limit=10`;
+            // Going backward
+            assetPage = page;
         }
+
+        // The cursor for the requested page is at history[page-1]
+        const cursor = assetCursorHistory[assetPage - 1] ?? null;
+        if (cursor) url += `&Cursor=${encodeURIComponent(cursor)}`;
 
         try {
             const res = await fetch(url);
-            const json = await res.json();
-            const items = json.data || json.results || [];
-            
-            if (items.length > 0) {
-                box.innerHTML = items.map(i => {
-                    const id = i.id || i.assetId;
-                    const name = i.name || i.assetName;
-                    const thumb = `https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&size=150x150&format=Png`;
-                    return `
-                        <div class="res-card">
-                            <img src="${thumb}" style="width:40px; height:40px; background:#000; border-radius:4px;">
-                            <div style="flex:1; min-width:0;">
-                                <div style="font-size:11px; font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
-                                <div style="font-size:9px; color:#8b949e; margin-bottom:4px;">ID: ${id}</div>
-                                <button class="btn" style="padding:2px 6px; font-size:9px;" onclick="navigator.clipboard.writeText('${id}')">Copy ID</button>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            } else {
-                box.innerHTML = "<div style='padding:10px;'>No results.</div>";
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            // Store next cursor for this page
+            const nextCursor = data.nextPageCursor || null;
+            assetCursorHistory[assetPage] = nextCursor; // cursor to use to fetch page assetPage+1
+
+            const items = data.data || [];
+            if (items.length === 0) {
+                statusEl.innerHTML = 'No results found.';
+                return;
             }
+            statusEl.style.display = 'none';
+
+            listEl.innerHTML = '';
+            items.forEach(item => {
+                const asset = item.asset || item; // v2 wraps in .asset
+                const id = asset.id || asset.assetId || item.id;
+                const name = asset.name || item.name || "Unknown";
+                const creator = asset.creator?.name || asset.creatorName || item.creator?.name || "";
+                const thumbUrl = item.thumbnailUrl || `https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=150x150&format=Png&isCircular=false`;
+
+                const el = document.createElement('div');
+                el.className = 'asset-item';
+                el.dataset.id = id;
+                el.dataset.name = name;
+                el.dataset.creator = creator;
+                el.dataset.thumb = thumbUrl;
+                el.dataset.type = typeKey;
+
+                el.innerHTML = `
+                    <img class="asset-thumb" src="${thumbUrl}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" alt="">
+                    <div class="asset-thumb-placeholder" style="display:none;">${typeIcon[typeKey] || '📦'}</div>
+                    <div class="asset-info">
+                        <div class="asset-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                        <div class="asset-id">ID: ${id}</div>
+                        <div class="asset-creator">${escapeHtml(creator)}</div>
+                    </div>
+                `;
+                el.onclick = () => selectAsset(el, id, name, creator, thumbUrl, typeKey);
+                listEl.appendChild(el);
+            });
+
+            // Pagination
+            pagEl.style.display = 'flex';
+            document.getElementById('assetPageInfo').innerText = `Page ${assetPage}`;
+            document.getElementById('assetPrevBtn').disabled = (assetPage <= 1);
+            document.getElementById('assetNextBtn').disabled = !nextCursor;
+
         } catch(e) {
-            box.innerHTML = "<div style='color:var(--danger); padding:10px;'>Error: Check connection/proxy.</div>";
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = `<span style="color:var(--danger);">Search failed: ${escapeHtml(e.message)}</span><br><span style="font-size:10px; color:#8b949e;">The Roblox Toolbox API may require authentication for some results. Try a different query or asset type.</span>`;
         }
     }
 
-    // Standard core logic preserved from index-1.html
+    function selectAsset(el, id, name, creator, thumbUrl, typeKey) {
+        // Deselect previous
+        document.querySelectorAll('.asset-item.selected').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+        assetSelectedItem = { id, name, creator, thumbUrl, typeKey };
+
+        const detailEl = document.getElementById('assetDetail');
+        detailEl.style.display = 'block';
+
+        document.getElementById('assetDetailThumb').src = thumbUrl;
+        document.getElementById('assetDetailName').innerText = name;
+        document.getElementById('assetDetailMeta').innerText = `ID: ${id} · by ${creator || 'Unknown'}`;
+
+        // Build copy chips based on asset type
+        const grid = document.getElementById('assetCopyGrid');
+        grid.innerHTML = '';
+
+        const chips = buildCopyChips(id, typeKey);
+        chips.forEach(chip => {
+            const el = document.createElement('div');
+            el.className = 'copy-chip';
+            el.innerHTML = `${chip.label}<span>${chip.desc}</span>`;
+            el.onclick = () => copyAndFlash(el, chip.value);
+            grid.appendChild(el);
+        });
+    }
+
+    function buildCopyChips(id, typeKey) {
+        // Returns array of { label, desc, value } to show as copy buttons
+        const chips = [];
+        chips.push({ label: 'Copy Asset ID', desc: 'Raw numeric ID', value: String(id) });
+
+        if (typeKey === 'MeshPart' || typeKey === 'Model') {
+            chips.push({ label: 'Mesh ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
+            // For MeshPart: texture is often separate. Common pattern: id-1 for older assets, but not reliable.
+            // Best practice: show the asset ID and let user find texture in Studio.
+            chips.push({ label: 'TextureID?', desc: 'May need Studio', value: `rbxassetid://${id}` });
+        }
+        if (typeKey === 'Decal' || typeKey === 'Image') {
+            chips.push({ label: 'Decal ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
+            // Underlying image ID for Decal is typically ID+1 (upload quirk), but unreliable.
+            // We note this accurately.
+            chips.push({ label: 'Image ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
+        }
+        if (typeKey === 'Audio') {
+            chips.push({ label: 'Sound ID', desc: 'For SFX block', value: String(id) });
+            chips.push({ label: 'rbxassetid', desc: 'Full URL form', value: `rbxassetid://${id}` });
+        }
+        if (typeKey === 'Animation') {
+            chips.push({ label: 'Anim ID', desc: 'For ANIM block', value: String(id) });
+            chips.push({ label: '[1, ID]', desc: 'ANIM_USE format', value: `[1,${id}]` });
+        }
+        if (typeKey === 'Plugin' || typeKey === 'Model') {
+            // Already covered above
+        }
+
+        return chips;
+    }
+
+    function copyAndFlash(el, value) {
+        navigator.clipboard.writeText(value).then(() => {}).catch(() => {
+            const t = document.createElement('textarea');
+            t.value = value; document.body.appendChild(t); t.select();
+            document.execCommand('copy'); document.body.removeChild(t);
+        });
+        el.classList.add('copied');
+        const orig = el.innerHTML;
+        el.innerHTML = `✓ Copied!<span>${escapeHtml(value.length > 20 ? value.slice(0,18)+'…' : value)}</span>`;
+        setTimeout(() => {
+            el.classList.remove('copied');
+            el.innerHTML = orig;
+        }, 1500);
+    }
+
+    // ── REST OF APP (unchanged) ──
+
+    const library = {
+        "Combat": {
+            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
+            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false, "360_BLOCK": false, HIT_USER: false, PROJECTILE_TAG: "", BRANCH: "", BRANCH_TARGET: "", CONTINUE: false, FILTER_INTERVAL: 1, AIM_LAST_HIT: -1 },
+            COUNTER: { TIME: 0.5, STUN: 1, BRANCH: "hit", ATTACK_TYPE2: "Melee,Bullet,Swarm,Explosion,Domain", REMOVE_ON_HIT: true, CANCEL_ENEMY: true },
+            GRAB: { TIME: 1, BODY_PART: "HumanoidRootPart", BODY_PART2: "HumanoidRootPart", POSITION: "0, 0, 4", ROTATION: "0, 180, 0", LAST_HIT: 1 },
+            ULTGIB: { AMOUNT: 20 },
+            HPGIB: { AMOUNT: -15 },
+            HITCNCL: { BRANCH: "endlag", TIME: 1, ENDLAG: 1, FLIP: true }
+        },
+        "Logic": {
+            WAIT: { TIME: 0.2 },
+            TAG: { TAG: "marker", VALUE: "1", CHECK: false, SET: true, TIME: 1, BRANCH: "" },
+            BRANCH: { BRANCH: "1", RANDOM: "" },
+            STATE: { STATE: "Stun", TIME: 1, VALUE: 1, CANCEL_ON_END: false, LAST_HIT: -1 },
+            LOOP: { LOOP_BACK: 1, LOOP_AMOUNT: 5, HOLD: false },
+            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: false, HOLD_FOR: 0 }
+        },
+        "Visual/Audio": {
+            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.2, LOOPED: false, PREVIEW: "[0,1]", LAST_HIT: -1 },
+            SFX: { ID: "0", VOLUME: 2, SPEED: 1, START: 0, CANCEL: false, END: 500, GLOBAL: false },
+            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, ROTATION: "0, 0, 0", ALT_ROTATION: "0, 0, 0", EASING_STYLE: "Linear", EASING_DIRECTION: "In", BODY_PART: "HumanoidRootPart", AMOUNT: 1, LAST_HIT: -1, CANCEL_ON_INTERRUPT: false, TEXTURE: 0, RUN_ON_SERVER: false }
+        },
+        "Motion": {
+            VELO: { FORCE: "0, 0, 50", TIME: 0.2, FADE: true, TRACK: false, RAGDOLL: 0, TRUE_RAGDOLL: false, LAST_HIT: -1 }
+        }
+    };
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    window.onload = () => {
+        loadAutoSave();
+        buildPalette();
+        if(moves.length === 0) addM('SKILL');
+        setInterval(autoSave, 30000);
+    };
+
+    function buildPalette() {
+        const pal = document.getElementById('palette');
+        for(let cat in library) {
+            let l = document.createElement('div'); l.className = 'cat-label'; l.innerText = cat;
+            pal.appendChild(l);
+            let g = document.createElement('div'); g.style = 'display:grid; grid-template-columns: 1fr 1fr; gap:5px;';
+            for(let b in library[cat]) {
+                let btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = b;
+                btn.onclick = () => addBlock(b, library[cat][b]);
+                g.appendChild(btn);
+            }
+            pal.appendChild(g);
+        }
+    }
+
     function addM(t) {
-        moves.push({ NAME: "New Move", K_NAME: t, DATA: { Line: [], Prop: { USE: true } } });
+        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false, NOSTUN: false, INV: false }, Req: [], Branch: {} } });
+        selectM(moves.length - 1);
+    }
+
+    function selectM(i) { 
+        selM = i; 
+        expandedBlock = null; 
+        render(); 
+    }
+
+    function toggleBlock(bi) {
+        if (expandedBlock === bi) {
+            expandedBlock = null;
+        } else {
+            expandedBlock = bi;
+        }
         render();
+    }
+
+    function addBlock(key, data) {
+        if(selM === null) return;
+        moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
+        expandedBlock = moves[selM].DATA.Line.length - 1;
+        render();
+    }
+
+    function deleteMove(i) {
+        if(confirm("Delete this move?")) {
+            moves.splice(i, 1);
+            selM = null;
+            expandedBlock = null;
+            render();
+        }
+    }
+
+    function deleteBlock(bi, e) {
+        e.stopPropagation();
+        moves[selM].DATA.Line.splice(bi, 1);
+        if (expandedBlock === bi) expandedBlock = null;
+        render();
+    }
+
+    function clearWS() {
+        if(confirm("Clear entire workspace? Cannot undo.")) {
+            moves = [];
+            selM = null;
+            expandedBlock = null;
+            render();
+        }
     }
 
     function render() {
         const ws = document.getElementById('ws');
+        if(moves.length === 0) {
+            ws.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:20px;">No moves yet. Add one from the sidebar.</p>';
+            renderInspector();
+            return;
+        }
+        
         ws.innerHTML = moves.map((m, i) => `
-            <div class="move-card ${selM===i?'active':''}" onclick="selM=${i}; render();">
-                <strong>${m.NAME}</strong> (${m.K_NAME})
+            <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME || 'Unnamed')}</strong>
+                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME} | KEY: ${m.KEY || '-'}</span>
+                </div>
+                <div style="display:flex; gap:5px; margin-top:8px;">
+                    <span style="font-size:9px; color:#8b949e; flex:1;">${m.DATA.Line.length} block(s)</span>
+                    <span style="color:var(--danger); cursor:pointer; font-size:11px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕ Delete</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    ${m.DATA.Line.map((b, bi) => {
+                        const isExpanded = expandedBlock === bi && selM === i;
+                        return `
+                        <div class="block-row ${isExpanded ? 'expanded' : ''}">
+                            <div class="block-row-header" onclick="event.stopPropagation(); selM=${i}; toggleBlock(${bi});">
+                                <span><strong>${bi+1}.</strong> ${escapeHtml(b.K_NAME)}</span>
+                                <div>
+                                    <span style="font-size:10px; color:#8b949e; margin-right:8px;">${isExpanded ? '▼' : '▶'}</span>
+                                    <span style="color:var(--danger); cursor:pointer;" onclick="deleteBlock(${bi}, event)" title="Delete block">✕</span>
+                                </div>
+                            </div>
+                            <div class="block-settings">
+                                <div class="settings-grid">
+                                    ${Object.keys(b).filter(k => k !== 'K_NAME').map(k => {
+                                        const val = b[k];
+                                        const safeVal = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : String(val);
+                                        const safeValEsc = escapeHtml(safeVal);
+                                        
+                                        if(typeof val === 'boolean') {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <select onchange="upd(${bi}, '${k}', this.value === 'true')">
+                                                    <option value="true" ${val?'selected':''}>True</option>
+                                                    <option value="false" ${!val?'selected':''}>False</option>
+                                                </select>
+                                            `;
+                                        } else {
+                                            return `
+                                                <label>${k.replace(/_/g, ' ')}</label>
+                                                <input type="text" value="${safeValEsc}" onchange="upd(${bi}, '${k}', this.value)">
+                                            `;
+                                        }
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
             </div>
         `).join('');
+        
+        renderInspector();
     }
 
-    window.onload = () => {
-        updateAssetTypes();
-        render();
-    };
+    function renderInspector() {
+        const ins = document.getElementById('ins-content');
+        if (selM === null) {
+            ins.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>';
+            return;
+        }
+        const m = moves[selM];
+        ins.innerHTML = `
+            <label>Move Name</label>
+            <input value="${escapeHtml(m.NAME || '')}" onchange="moves[selM].NAME=this.value; render()">
+            
+            <label>Move Type (K_NAME)</label>
+            <select onchange="moves[selM].K_NAME=this.value; render()">
+                <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
+                <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
+                <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
+                <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
+                <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
+                <option ${m.K_NAME=='AWAKENING'?'selected':''}>AWAKENING</option>
+            </select>
+            
+            <label>Cooldown</label>
+            <input type="number" value="${m.COOLDOWN || 0}" onchange="moves[selM].COOLDOWN=Number(this.value); render()">
+            
+            <label>Input Key (ID)</label>
+            <input type="number" value="${m.KEY || 1}" onchange="moves[selM].KEY=Number(this.value); render()">
+            
+            <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
+            
+            <h4 style="margin:0 0 10px 0; color:var(--accent); font-size:12px;">Boolean Props</h4>
+            ${['USE', 'AWK', 'AWK2', 'NOCANCEL', 'NOSTUN', 'INV'].map(prop => `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="margin:0;">${prop}</label>
+                    <select style="width:60px; padding:4px; margin:0;" onchange="updateProp('${prop}', this.value === 'true')">
+                        <option value="true" ${(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>True</option>
+                        <option value="false" ${!(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>False</option>
+                    </select>
+                </div>
+            `).join('')}
+        `;
+    }
+
+    function updateProp(prop, val) {
+        if (!moves[selM].DATA.Prop) moves[selM].DATA.Prop = {};
+        moves[selM].DATA.Prop[prop] = val;
+    }
+
+    function upd(bi, k, v) {
+        let val = v;
+        if (typeof v !== 'boolean') {
+            try {
+                if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
+                    val = JSON.parse(v);
+                } else if (!isNaN(v) && v.trim() !== "") {
+                    val = Number(v);
+                }
+            } catch(e) {}
+        }
+        moves[selM].DATA.Line[bi][k] = val;
+    }
+
+    async function exportZ() {
+        if(!window.zstdEngine) {
+            alert("Zstd not ready. Please wait for the ZSTD READY status.");
+            return;
+        }
+        const raw = JSON.stringify(moves.map(m => ({ ...m, DATA: JSON.stringify(m.DATA) })));
+        try {
+            const uint8 = new TextEncoder().encode(raw);
+            const compressed = window.zstdEngine.compress(uint8);
+            let bin = '';
+            for (let i = 0; i < compressed.length; i++) bin += String.fromCharCode(compressed[i]);
+            const b64 = btoa(bin);
+            navigator.clipboard.writeText(b64).then(() => {
+                alert("✓ Zstd string copied to clipboard!");
+            }).catch(() => {
+                const t = document.createElement('textarea');
+                t.value = b64; document.body.appendChild(t); t.select();
+                document.execCommand('copy'); document.body.removeChild(t);
+                alert("✓ Zstd string copied to clipboard!");
+            });
+        } catch(e) { alert("Export Error: " + e.message); }
+    }
+
+    function importZ() {
+        const s = prompt("Paste your Zstd data:");
+        if(!s || !window.zstdEngine) return;
+        try {
+            const bin = atob(s);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bytes));
+            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
+            selM = null;
+            expandedBlock = null;
+            render();
+            alert("✓ Moveset imported successfully!");
+        } catch(e) { alert("Import failed. Check that the Zstd string is valid.\n" + e.message); }
+    }
+
+    function autoSave() {
+        try { localStorage.setItem('moveset_autosave', JSON.stringify(moves)); } catch(e) {}
+    }
+
+    function loadAutoSave() {
+        try {
+            const saved = localStorage.getItem('moveset_autosave');
+            if(saved) moves = JSON.parse(saved);
+        } catch(e) {}
+    }
 </script>
 </body>
 </html>
