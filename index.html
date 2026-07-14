@@ -1,763 +1,1001 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Moveset Builder Ultra V3.6</title>
-    <script type="module">
-        import { Zstd } from "https://esm.sh/@hpcc-js/wasm-zstd@1.12.5?bundle";
-        try {
-            const zstd = await Zstd.load();
-            window.zstdEngine = zstd;
-            const el = document.getElementById('z-status');
-            if (el) { el.innerText = 'ZSTD READY'; el.style.background = '#238636'; }
-        } catch(e) {
-            console.error("Zstd load failed:", e);
-            const el = document.getElementById('z-status');
-            if (el) { el.innerText = 'ZSTD FAILED'; el.style.background = '#da3633'; }
-        }
-    </script>
-    <style>
-        :root {
-            --bg: #0d1117; --side: #161b22; --border: #30363d;
-            --accent: #58a6ff; --text: #c9d1d9; --bright: #f0f6fc; --danger: #f85149;
-        }
-        * { box-sizing: border-box; font-family: -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
-        body { margin: 0; background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
-
-        .sidebar { width: 280px; background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-        .sidebar-content { padding: 15px; overflow-y: auto; flex: 1; min-height: 0; }
-        
-        .canvas { flex: 1; overflow-y: auto; padding: 20px; background: #000; border-right: 1px solid var(--border); min-width: 0; }
-        .inspector { width: 280px; background: var(--side); padding: 15px; overflow-y: auto; flex-shrink: 0; }
-
-        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; background: var(--side); flex-shrink: 0; }
-        
-        .btn { background: #21262d; border: 1px solid var(--border); color: var(--bright); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; margin-bottom: 0; transition: all 0.2s; text-align: center;}
-        .btn:hover { background: #30363d; border-color: #8b949e; }
-        .btn.primary { background: #238636; border-color: rgba(240,246,252,0.1); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
-        label { font-size: 10px; text-transform: uppercase; color: #8b949e; font-weight: 800; display: block; margin-bottom: 5px; margin-top: 5px; }
-
-        .move-card { background: #161b22; border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 15px; border-left: 4px solid transparent; transition: all 0.15s; }
-        .move-card.active { border-left-color: var(--accent); background: #1c2128; border-color:#484f58; }
-        
-        .block-row { background: #0d1117; border: 1px solid var(--border); padding: 10px; border-radius: 6px; margin-top: 6px; font-size: 12px; transition: all 0.15s; }
-        .block-row-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-        .block-row:hover { border-color: #484f58; }
-        .block-row.expanded { border-color: var(--accent); background: #161b22; }
-        
-        .block-settings { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: none; }
-        .block-row.expanded .block-settings { display: block; }
-        
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; align-items: center;}
-        .settings-grid label { margin: 0; }
-        .settings-grid input, .settings-grid select { margin-bottom: 0; padding: 6px; }
-
-        /* ── ASSET SEARCH ── */
-        #assetSearch { margin-bottom: 12px; }
-
-        #assetTypeRow { display: flex; gap: 5px; margin-bottom: 8px; }
-        #assetTypeRow select { margin-bottom: 0; flex: 1; }
-
-        #assetQueryRow { display: flex; gap: 5px; margin-bottom: 8px; }
-        #assetQueryRow input { margin-bottom: 0; flex: 1; }
-        #assetQueryRow button { flex-shrink: 0; }
-
-        #assetResults {
-            display: none;
-            background: #0d1117;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-
-        #assetResultsList {
-            max-height: 340px;
-            overflow-y: auto;
-        }
-
-        .asset-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border);
-            cursor: pointer;
-            transition: background 0.12s;
-        }
-        .asset-item:last-child { border-bottom: none; }
-        .asset-item:hover { background: #161b22; }
-        .asset-item.selected { background: #1c2128; border-left: 3px solid var(--accent); }
-
-        .asset-thumb {
-            width: 44px;
-            height: 44px;
-            object-fit: cover;
-            border-radius: 5px;
-            background: #21262d;
-            flex-shrink: 0;
-            border: 1px solid var(--border);
-        }
-        .asset-thumb-placeholder {
-            width: 44px;
-            height: 44px;
-            border-radius: 5px;
-            background: #21262d;
-            flex-shrink: 0;
-            border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: #484f58;
-        }
-
-        .asset-info { flex: 1; min-width: 0; }
-        .asset-name { font-size: 11px; font-weight: 700; color: var(--bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .asset-id { font-size: 10px; color: #8b949e; }
-        .asset-creator { font-size: 10px; color: #484f58; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        #assetDetail {
-            display: none;
-            padding: 10px;
-            border-top: 1px solid var(--border);
-            background: #0a0e14;
-        }
-        #assetDetailThumb {
-            width: 100%;
-            height: 100px;
-            object-fit: contain;
-            border-radius: 6px;
-            background: #21262d;
-            border: 1px solid var(--border);
-            margin-bottom: 8px;
-        }
-        #assetDetailName { font-size: 12px; font-weight: 700; color: var(--bright); margin-bottom: 2px; }
-        #assetDetailMeta { font-size: 10px; color: #8b949e; margin-bottom: 8px; }
-
-        .asset-copy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-        .copy-chip {
-            background: #21262d;
-            border: 1px solid var(--border);
-            border-radius: 5px;
-            padding: 5px 8px;
-            font-size: 10px;
-            cursor: pointer;
-            text-align: center;
-            color: var(--bright);
-            font-weight: 700;
-            transition: all 0.15s;
-            position: relative;
-        }
-        .copy-chip:hover { background: #30363d; border-color: var(--accent); color: var(--accent); }
-        .copy-chip.copied { border-color: #238636; color: #56d364; background: #0f2b1a; }
-        .copy-chip span { display: block; font-size: 9px; color: #8b949e; font-weight: 400; margin-top: 1px; }
-
-        .asset-pagination {
-            display: flex;
-            gap: 5px;
-            padding: 8px 10px;
-            border-top: 1px solid var(--border);
-            background: #0a0e14;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .asset-pagination button { padding: 4px 10px; font-size: 10px; }
-        #assetPageInfo { font-size: 10px; color: #8b949e; }
-
-        .asset-status {
-            padding: 12px;
-            text-align: center;
-            font-size: 11px;
-            color: #8b949e;
-        }
-
-        .cat-label { font-size: 10px; color: var(--accent); margin: 15px 0 5px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #30363d; padding-bottom: 2px; }
-
-        @media (max-width: 900px) {
-            body { flex-direction: column; overflow-y: auto; height: auto; display: block; }
-            .sidebar, .inspector { width: 100%; height: auto; border: none; flex-shrink: 1; }
-            .sidebar { border-bottom: 1px solid var(--border); }
-            .sidebar-content { overflow-y: visible; padding-bottom: 30px; }
-            .canvas { width: 100%; min-height: 450px; border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; flex: none; display: block; }
-            .inspector { overflow-y: visible; padding-bottom: 30px; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Roblox Puzzle Solver</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--card:#12121a;--border:#1e1e2e;--accent:#6c5ce7;--accent2:#a29bfe;--green:#00b894;--red:#e17055;--yellow:#fdcb6e;--text:#e0e0e0;--muted:#6c6c8a;--input-bg:#1a1a2e}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+.header{position:sticky;top:0;z-index:100;background:rgba(10,10,15,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .version{font-size:11px;color:var(--muted);margin-left:auto}
+.tabs{display:flex;gap:4px;padding:8px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex-shrink:0;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tab:hover{border-color:var(--accent)}
+.content{padding:12px;padding-bottom:100px}
+.section{display:none;animation:fadeIn .3s ease}
+.section.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-title .icon{font-size:18px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+textarea,input[type="text"],input[type="number"],select{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:14px;font-family:inherit;resize:vertical;transition:border-color .2s}
+textarea:focus,input:focus,select:focus{outline:none;border-color:var(--accent)}
+textarea{min-height:80px;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.5}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .2s;font-family:inherit}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:active{transform:scale(0.97);background:#5b4bd5}
+.btn-secondary{background:var(--input-bg);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:active{transform:scale(0.97)}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.output{background:#0d0d14;border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;font-family:'SF Mono',monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;min-height:44px;max-height:300px;overflow-y:auto;color:var(--green);user-select:all;-webkit-user-select:all}
+.output:empty::before{content:'Results appear here...';color:var(--muted);font-style:italic}
+.output.error{color:var(--red)}
+.chip{display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;margin:2px}
+.chip-easy{background:rgba(0,184,148,0.15);color:var(--green)}
+.chip-medium{background:rgba(253,203,110,0.15);color:var(--yellow)}
+.chip-hard{background:rgba(225,112,85,0.15);color:var(--red)}
+.chip-legendary{background:rgba(108,92,231,0.15);color:var(--accent2)}
+.search-box{position:relative;margin-bottom:12px}
+.search-box input{padding-left:36px}
+.search-box::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px}
+.secret-list{max-height:50vh;overflow-y:auto;scrollbar-width:thin}
+.secret-item{background:var(--input-bg);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.secret-item:active{transform:scale(0.98);background:#222240}
+.secret-item .name{font-weight:600;font-size:14px;margin-bottom:4px}
+.secret-item .solution{font-size:12px;color:var(--muted);line-height:1.4}
+.secret-item .meta{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.ai-section{border:1px dashed var(--accent);border-radius:16px;padding:16px;margin-bottom:12px;background:rgba(108,92,231,0.05)}
+.ai-section .card-title{color:var(--accent2)}
+.api-key-row{display:flex;gap:8px;align-items:end}
+.api-key-row input{flex:1}
+.api-key-row .btn{flex-shrink:0}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.status-dot.off{background:var(--red)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+.slider-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--input-bg);border-radius:8px;font-size:18px;font-weight:700;cursor:pointer;transition:all .15s;border:1px solid var(--border)}
+.slider-cell.empty{background:transparent;border-color:transparent}
+.slider-cell:not(.empty):active{transform:scale(0.92);background:var(--accent)}
+.lights-cell{aspect-ratio:1;border-radius:8px;cursor:pointer;transition:all .15s;border:2px solid transparent}
+.lights-cell.on{background:var(--yellow);box-shadow:0 0 12px rgba(253,203,110,0.4)}
+.lights-cell.off{background:#1a1a2e}
+.lights-cell:active{transform:scale(0.9)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;z-index:999;animation:toastIn .3s ease,toastOut .3s ease 1.7s forwards;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes toastOut{to{opacity:0;transform:translateX(-50%) translateY(20px)}}
+.cipher-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cipher-grid .card{margin-bottom:0}
+.game-selector{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.file-drop{border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;transition:all .2s}
+.file-drop:active,.file-drop.drag{border-color:var(--accent);background:rgba(108,92,231,0.05)}
+.file-drop input{display:none}
+.seq-grid{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.seq-item{background:var(--accent);color:#fff;padding:6px 12px;border-radius:8px;font-weight:700;font-size:14px}
+.seq-input{width:60px!important;text-align:center;flex-shrink:0}
+.brute-list{max-height:40vh;overflow-y:auto}
+.brute-item{display:flex;gap:8px;padding:8px;border-bottom:1px solid var(--border);font-size:13px;align-items:center}
+.brute-item .shift{color:var(--muted);width:40px;flex-shrink:0}
+.brute-item .result{flex:1;font-family:monospace}
+.tab-count{background:var(--accent);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px}
+</style>
 </head>
 <body>
 
-<div class="sidebar">
-    <div class="header">
-        <span style="font-weight:900; color:var(--accent);">ULTRA V3.6</span>
-        <div id="z-status" style="font-size:9px; background:var(--danger); padding:2px 5px; border-radius:4px; color:#fff; cursor:help;" title="Zstd compression status">ZSTD: LOADING</div>
-    </div>
-    <div class="sidebar-content">
-
-        <!-- ═══════════════════════════════════════════════
-             ROBLOX ASSET SEARCH
-        ═══════════════════════════════════════════════ -->
-        <label>Roblox Asset Search</label>
-        <div id="assetSearch">
-
-            <!-- Type selector -->
-            <div id="assetTypeRow">
-                <select id="assetTypeSelect" style="margin:0;">
-                    <option value="Animation">Animation</option>
-                    <option value="Audio">Audio / SFX</option>
-                    <option value="Decal">Decal / Image</option>
-                    <option value="MeshPart" selected>MeshPart</option>
-                    <option value="Model">Model</option>
-                    <option value="Plugin">Plugin</option>
-                </select>
-            </div>
-
-            <!-- Query + search button -->
-            <div id="assetQueryRow">
-                <input id="assetQueryInput" placeholder="Search keyword…" style="margin:0;" onkeypress="if(event.key==='Enter') searchAssets(1)">
-                <button class="btn primary" onclick="searchAssets(1)">GO</button>
-            </div>
-
-            <!-- Results panel -->
-            <div id="assetResults">
-                <div id="assetStatus" class="asset-status">Enter a query and press GO.</div>
-                <div id="assetResultsList"></div>
-                <div id="assetDetail">
-                    <img id="assetDetailThumb" src="" alt="">
-                    <div id="assetDetailName"></div>
-                    <div id="assetDetailMeta"></div>
-                    <div class="asset-copy-grid" id="assetCopyGrid"></div>
-                </div>
-                <div class="asset-pagination" id="assetPagination" style="display:none;">
-                    <button class="btn" id="assetPrevBtn" onclick="searchAssets(assetPage-1)" disabled>◀ Prev</button>
-                    <span id="assetPageInfo">Page 1</span>
-                    <button class="btn" id="assetNextBtn" onclick="searchAssets(assetPage+1)">Next ▶</button>
-                </div>
-            </div>
-
-        </div>
-        <!-- ══ END ASSET SEARCH ══ -->
-
-        <label>Add New Move</label>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
-            <button onclick="addM('SKILL')" class="btn" title="Create new SKILL move">SKILL</button>
-            <button onclick="addM('MELEE')" class="btn" title="Create new MELEE move">MELEE</button>
-            <button onclick="addM('CHASE')" class="btn" title="Create new CHASE move">CHASE</button>
-            <button onclick="addM('ULTIMATE')" class="btn" title="Create new ULTIMATE move">ULTIMATE</button>
-            <button onclick="addM('SPECIAL')" class="btn" title="Create new SPECIAL move">SPECIAL</button>
-            <button onclick="addM('AWAKENING')" class="btn" title="Create new AWAKENING move">AWK</button>
-        </div>
-
-        <div id="palette"></div>
-    </div>
+<div class="header">
+  <h1>🧩 Puzzle Solver</h1>
+  <span class="version">v2.0</span>
 </div>
 
-<div class="canvas">
-    <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center; flex-wrap:wrap; gap:10px;">
-        <h3 style="margin:0;">Workspace</h3>
-        <div style="display:flex; gap:8px;">
-            <button class="btn" onclick="importZ()" title="Import compressed Zstd data">Import</button>
-            <button class="btn primary" onclick="exportZ()" id="export-btn" title="Export workspace as Zstd">Export Zstd</button>
-            <button class="btn" onclick="clearWS()" title="Clear all moves (cannot undo)">Clear</button>
-        </div>
-    </div>
-    <div id="ws"></div>
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="ai">🤖 AI Solve</div>
+  <div class="tab" data-tab="ciphers">🔐 Ciphers</div>
+  <div class="tab" data-tab="puzzles">🧮 Solvers</div>
+  <div class="tab" data-tab="games">🎮 Games</div>
+  <div class="tab" data-tab="tools">🛠 Tools</div>
 </div>
 
-<div class="inspector">
-    <label>Move Properties</label>
-    <div id="ins-content">
-        <p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>
+<div class="content">
+
+<!-- ===== AI SOLVE ===== -->
+<div class="section active" id="sec-ai">
+  <div class="ai-section">
+    <div class="card-title"><span class="icon">🤖</span> AI Puzzle Assistant</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Uses Google Gemini (free) to analyze screenshots, decode codes, and solve puzzles. Your key stays in your browser only.</p>
+    <label>Gemini API Key</label>
+    <div class="api-key-row">
+      <input type="text" id="apiKey" placeholder="AIzaSy... (get free at aistudio.google.com)">
+      <button class="btn btn-secondary" onclick="saveKey()">Save</button>
     </div>
+    <div style="margin-top:8px">
+      <span class="status-dot" id="aiStatus"></span>
+      <span style="font-size:12px;color:var(--muted)" id="aiStatusText">No API key set</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📷</span> Screenshot / Image Analysis</div>
+    <div class="file-drop" id="fileDrop" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept="image/*" capture="environment">
+      📷 Tap to take photo or upload screenshot
+    </div>
+    <img id="previewImg" style="display:none;width:100%;border-radius:10px;margin-top:10px;max-height:200px;object-fit:contain">
+    <label style="margin-top:10px">Or describe the puzzle</label>
+    <textarea id="aiPuzzleDesc" placeholder="e.g. There's a 4x4 grid with numbers, some tiles are missing. The sequence is 2, ?, 6, 8..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="analyzeWithAI()">🤖 Analyze & Solve</button>
+      <button class="btn btn-secondary" onclick="clearAI()">Clear</button>
+    </div>
+    <div class="output" id="aiOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">💬</span> Ask AI Anything</div>
+    <textarea id="aiChatInput" rows="3" placeholder="Ask about any Roblox puzzle, cipher, or game mechanic...&#10;&#10;Examples:&#10;- How do I solve the slider puzzle in Secret Universe?&#10;- What does binary 01001000 mean?&#10;- How to find the Puthing Around secret?"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="chatWithAI()">Send</button>
+    </div>
+    <div class="output" id="aiChatOutput"></div>
+  </div>
+</div>
+
+<!-- ===== CIPHERS ===== -->
+<div class="section" id="sec-ciphers">
+  <div class="card">
+    <div class="card-title"><span class="icon">🔍</span> Auto-Detect & Decode</div>
+    <textarea id="autoInput" placeholder="Paste any code/cipher here - the tool will auto-detect and decode it..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="autoDetect()">🔍 Auto-Detect</button>
+    </div>
+    <div class="output" id="autoOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔢</span> Binary</div>
+    <input type="text" id="binaryInput" placeholder="01001000 01100101 01101100 01101100 01101111">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="decodeBinary()">Decode</button>
+      <button class="btn btn-secondary" onclick="encodeBinary()">Encode</button>
+    </div>
+    <div class="output" id="binaryOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔄</span> Caesar / ROT Cipher</div>
+    <input type="text" id="caesarInput" placeholder="URYYB, GUVF vf n frperg zrffntr...">
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <label>Shift (1-25)</label>
+        <input type="number" id="caesarShift" value="13" min="1" max="25">
+      </div>
+      <div style="display:flex;align-items:end">
+        <button class="btn btn-primary" style="width:100%" onclick="decodeCaesar()">Decode</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-red" onclick="bruteForceCaesar()">💥 Brute Force All 25</button>
+      <button class="btn btn-secondary" onclick="encodeCaesar()">Encode</button>
+    </div>
+    <div class="output" id="caesarOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> Base64</div>
+    <input type="text" id="base64Input" placeholder="SGVsbG8gV29ybGQ=">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="decodeBase64()">Decode</button>
+      <button class="btn btn-secondary" onclick="encodeBase64()">Encode</button>
+    </div>
+    <div class="output" id="base64Output"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔟</span> Hexadecimal</div>
+    <input type="text" id="hexInput" placeholder="48656C6C6F">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="decodeHex()">Decode</button>
+      <button class="btn btn-secondary" onclick="encodeHex()">Encode</button>
+    </div>
+    <div class="output" id="hexOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔃</span> Atbash Cipher</div>
+    <input type="text" id="atbashInput" placeholder="SVOOL DSVOW">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="decodeAtbash()">Decode (Same as Encode)</button>
+    </div>
+    <div class="output" id="atbashOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔑</span> Vigenere Cipher</div>
+    <input type="text" id="vigenereInput" placeholder="Encrypted text...">
+    <input type="text" id="vigenereKey" placeholder="Key word..." style="margin-top:8px">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="decodeVigenere()">Decode</button>
+    </div>
+    <div class="output" id="vigenereOutput"></div>
+  </div>
+</div>
+
+<!-- ===== SOLVERS ===== -->
+<div class="section" id="sec-puzzles">
+  <div class="card">
+    <div class="card-title"><span class="icon">🔢</span> Number Sequence Solver</div>
+    <input type="text" id="seqInput" placeholder="2, 4, 6, 8, 10 (comma separated)">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="solveSequence()">🧮 Find Pattern</button>
+    </div>
+    <div class="output" id="seqOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon"> prime </span> Prime Factorization</div>
+    <input type="number" id="primeInput" placeholder="e.g. 147" min="2">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="factorPrime()">Factorize</button>
+      <button class="btn btn-secondary" onclick="checkPrime()">Is Prime?</button>
+    </div>
+    <div class="output" id="primeOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📐</span> Equation Solver</div>
+    <div class="grid2">
+      <div>
+        <label>Type</label>
+        <select id="eqType" onchange="updateEqFields()">
+          <option value="linear">Linear (ax + b = 0)</option>
+          <option value="quadratic">Quadratic (ax² + bx + c = 0)</option>
+        </select>
+      </div>
+      <div>
+        <label id="eqLabel1">a</label>
+        <input type="number" id="eqA" placeholder="a" step="any">
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <label id="eqLabel2">b</label>
+        <input type="number" id="eqB" placeholder="b" step="any">
+      </div>
+      <div id="eqCWrap">
+        <label>c</label>
+        <input type="number" id="eqC" placeholder="c" step="any">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="solveEquation()">Solve</button>
+    </div>
+    <div class="output" id="eqOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🧩</span> Slider Puzzle Solver</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Enter the current state (0 = empty tile). For 3x3, enter 9 numbers.</p>
+    <input type="text" id="sliderInput" placeholder="1,2,3,4,5,6,0,7,8 (0=empty)">
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <label>Grid Size</label>
+        <select id="sliderSize">
+          <option value="3">3x3</option>
+          <option value="4">4x4</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:end">
+        <button class="btn btn-primary" style="width:100%" onclick="solveSlider()">Solve</button>
+      </div>
+    </div>
+    <div class="output" id="sliderOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">💡</span> Lights Out Solver</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Enter 1 for ON (yellow), 0 for OFF. Click cells below or type manually.</p>
+    <input type="text" id="lightsInput" placeholder="1,0,1,0,1,0,1,0,1 (5x5 = 25 numbers)">
+    <div id="lightsGrid" class="grid3" style="margin:10px 0;max-width:250px"></div>
+    <div class="grid2">
+      <div>
+        <label>Size</label>
+        <select id="lightsSize" onchange="buildLightsGrid()">
+          <option value="3">3x3</option>
+          <option value="5" selected>5x5</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:end">
+        <button class="btn btn-primary" style="width:100%" onclick="solveLights()">Solve</button>
+      </div>
+    </div>
+    <div class="output" id="lightsOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🧮</span> GCD / LCM Calculator</div>
+    <div class="grid2">
+      <div><label>Number A</label><input type="number" id="gcdA" placeholder="12"></div>
+      <div><label>Number B</label><input type="number" id="gcdB" placeholder="18"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="calcGCD()">GCD</button>
+      <button class="btn btn-secondary" onclick="calcLCM()">LCM</button>
+    </div>
+    <div class="output" id="gcdOutput"></div>
+  </div>
+</div>
+
+<!-- ===== GAMES DATABASE ===== -->
+<div class="section" id="sec-games">
+  <div class="game-selector" id="gameSelector">
+    <div class="tab active" data-game="all" onclick="filterGame('all')">All</div>
+    <div class="tab" data-game="su" onclick="filterGame('su')">Secret Universe</div>
+    <div class="tab" data-game="ego" onclick="filterGame('ego')">Easiest Game</div>
+    <div class="tab" data-game="ts" onclick="filterGame('ts')">Tycoon Secrets</div>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="secretSearch" placeholder="Search secrets, solutions..." oninput="searchSecrets()">
+  </div>
+
+  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+    <span id="secretCount">0</span> secrets found
+  </div>
+
+  <div class="secret-list" id="secretList"></div>
+</div>
+
+<!-- ===== TOOLS ===== -->
+<div class="section" id="sec-tools">
+  <div class="card">
+    <div class="card-title"><span class="icon">🔢</span> Number Base Converter</div>
+    <input type="text" id="baseInput" placeholder="Enter number...">
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <label>From Base</label>
+        <select id="baseFrom">
+          <option value="10" selected>Decimal (10)</option>
+          <option value="2">Binary (2)</option>
+          <option value="8">Octal (8)</option>
+          <option value="16">Hex (16)</option>
+        </select>
+      </div>
+      <div>
+        <label>To Base</label>
+        <select id="baseTo">
+          <option value="2">Binary (2)</option>
+          <option value="10">Decimal (10)</option>
+          <option value="8">Octal (8)</option>
+          <option value="16" selected>Hex (16)</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="convertBase()">Convert</button>
+    </div>
+    <div class="output" id="baseOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">⏱</span> UTC Time Helper</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">For puzzles like Theory of Relativity that need UTC time</p>
+    <div class="output" id="utcTime" style="font-size:24px;text-align:center;padding:16px"></div>
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-primary" onclick="showUTC()">Refresh UTC</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🎲</span> Random Number Generator</div>
+    <div class="grid2">
+      <div><label>Min</label><input type="number" id="randMin" value="1"></div>
+      <div><label>Max</label><input type="number" id="randMax" value="100"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="genRandom()">Generate</button>
+    </div>
+    <div class="output" id="randOutput" style="font-size:32px;text-align:center;padding:16px;font-weight:700"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> Word Counter / Text Tools</div>
+    <textarea id="textToolInput" rows="3" placeholder="Paste text here..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="textStats()">Stats</button>
+      <button class="btn btn-secondary" onclick="textReverse()">Reverse</button>
+      <button class="btn btn-secondary" onclick="textUpper()">UPPER</button>
+      <button class="btn btn-secondary" onclick="textLower()">lower</button>
+    </div>
+    <div class="output" id="textToolOutput"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📖</span> Roblox Chat Commands</div>
+    <div class="secret-list" style="max-height:none">
+      <div class="secret-item"><div class="name">/e dance</div><div class="solution">Makes your character dance - used for several secrets</div></div>
+      <div class="secret-item"><div class="name">/e dance2</div><div class="solution">Alternative dance animation</div></div>
+      <div class="secret-item"><div class="name">/e dance3</div><div class="solution">Third dance variant</div></div>
+      <div class="secret-item"><div class="name">/e wave</div><div class="solution">Wave animation</div></div>
+      <div class="secret-item"><div class="name">/e point</div><div class="solution">Point animation</div></div>
+      <div class="secret-item"><div class="name">/e cheer</div><div class="solution">Cheer animation</div></div>
+      <div class="secret-item"><div class="name">/e laugh</div><div class="solution">Laugh animation</div></div>
+      <div class="secret-item"><div class="name">/e shrug</div><div class="solution">Shrug animation</div></div>
+      <div class="secret-item"><div class="name">/e slay</div><div class="solution">Slay animation</div></div>
+      <div class="secret-item"><div class="name">/e fp</div><div class="solution">Fright pose</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🔗</span> Useful Links</div>
+    <div class="secret-list" style="max-height:none">
+      <a href="https://www.secretuniverse.wiki/wiki/Secrets" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Secret Universe Wiki</div><div class="solution">Complete secrets list & guides</div></a>
+      <a href="https://easiest-game-ever-roblox.fandom.com/wiki/Easiest_Game_Ever_Roblox_Wiki" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Easiest Game Wiki</div><div class="solution">All 89 endings guide</div></a>
+      <a href="https://tycoonsecrets.wiki/wiki/" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Tycoon Secrets Wiki</div><div class="solution">85+ secrets walkthrough</div></a>
+      <a href="https://jweilhammer.github.io/sliding-puzzle-solver" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Online Slider Solver</div><div class="solution">Visual slider puzzle solver</div></a>
+      <a href="https://www.dcode.fr/lights-out-solver" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Lights Out Solver</div><div class="solution">Online lights out solver</div></a>
+      <a href="https://www.rapidtables.com/calc/math/binary-calculator.html" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Binary Calculator</div><div class="solution">Convert binary to text</div></a>
+      <a href="https://www.calculatorsoup.com/calculators/math/prime-factors.php" target="_blank" class="secret-item" style="text-decoration:none"><div class="name">Prime Factorization</div><div class="solution">Factor numbers online</div></a>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <script>
-    window.zstdEngine = null;
-    let moves = [];
-    let selM = null;
-    let expandedBlock = null;
+// ===== DATABASE =====
+const SECRETS_DB = [
+  // Secret Universe
+  {g:"su",n:"Secret Universe",d:1,s:"Start the game - first secret",t:"easy"},
+  {g:"su",n:"First Steps",d:1,s:"Walk forward from spawn",t:"easy"},
+  {g:"su",n:"Yippee!",d:5,s:"Click the happy face",t:"easy"},
+  {g:"su",n:"Loud & Proud",d:10,s:"Click the loud speaker",t:"easy"},
+  {g:"su",n:"Look!",d:10,s:"Find the telescope",t:"easy"},
+  {g:"su",n:"Dance Now",d:15,s:"Use /e dance in chat",t:"easy"},
+  {g:"su",n:"Jumper",d:20,s:"Jump 10 times",t:"easy"},
+  {g:"su",n:"Heheheha!",d:20,s:"Click the laughing face",t:"easy"},
+  {g:"su",n:"Marathon",d:25,s:"Run 1000 studs",t:"easy"},
+  {g:"su",n:"Star",d:30,s:"Find the hidden star",t:"easy"},
+  {g:"su",n:"Expressive",d:30,s:"Use 5 different emotes",t:"easy"},
+  {g:"su",n:"Check It",d:35,s:"Check the checkbox",t:"easy"},
+  {g:"su",n:"Welcome To The Club",d:40,s:"Enter the club building",t:"easy"},
+  {g:"su",n:"Outsider",d:40,s:"Go outside the map boundary",t:"easy"},
+  {g:"su",n:"Secret",d:42,s:"Click the 'Free Secret!' button in the Robux Shop UI",t:"easy"},
+  {g:"su",n:"Hello!",d:45,s:"Say 'hello' in chat",t:"easy"},
+  {g:"su",n:"Social Butterfly",d:50,s:"Talk to 5 NPCs",t:"easy"},
+  {g:"su",n:"Elevator Traveling",d:50,s:"Use the elevator",t:"easy"},
+  {g:"su",n:"Voidseeker",d:100,s:"Fall into the void",t:"medium"},
+  {g:"su",n:"Meet Your Maker",d:100,s:"Find the developer room",t:"medium"},
+  {g:"su",n:"Danse Macabre",d:150,s:"Dance on the grave",t:"medium"},
+  {g:"su",n:"Very Important Person",d:200,s:"Find the VIP room",t:"medium"},
+  {g:"su",n:"To whom it may concern,",d:250,s:"Read the letter",t:"medium"},
+  {g:"su",n:"#%!&",d:300,s:"Find the hidden button",t:"medium"},
+  {g:"su",n:"Help Wanted",d:350,s:"Help an NPC with a task",t:"medium"},
+  {g:"su",n:"Silence!",d:400,s:"Stay silent (no chat) for 60 seconds",t:"medium"},
+  {g:"su",n:"Many Ways",d:500,s:"Find multiple paths to the same place",t:"medium"},
+  {g:"su",n:"Heartless",d:500,s:"Find the heartless room",t:"medium"},
+  {g:"su",n:"Recluse",d:500,s:"Stay away from all NPCs",t:"medium"},
+  {g:"su",n:"DIMENSION-1",d:500,s:"Enter dimension 1 portal",t:"medium"},
+  {g:"su",n:"ALL CAPS",d:500,s:"Type something in ALL CAPS in chat",t:"medium"},
+  {g:"su",n:"Ultraviolet",d:500,s:"Find the UV light",t:"medium"},
+  {g:"su",n:"Task Master",d:550,s:"Complete all tasks",t:"medium"},
+  {g:"su",n:"Superstar",d:550,s:"Collect 1000 stars",t:"medium"},
+  {g:"su",n:"Ultraviolent",d:550,s:"Break something",t:"medium"},
+  {g:"su",n:"Consumer",d:550,s:"Consume everything",t:"medium"},
+  {g:"su",n:"Overly Dedicated",d:550,s:"Play for 10 hours total",t:"medium"},
+  {g:"su",n:"Quid Pro Quo",d:550,s:"Trade with an NPC",t:"medium"},
+  {g:"su",n:"Compound Nouns",d:600,s:"Combine words together",t:"hard"},
+  {g:"su",n:"MY EYES!!!!!!!!!",d:600,s:"Look at the bright light",t:"hard"},
+  {g:"su",n:"The Foundation",d:600,s:"Find the foundation structure",t:"hard"},
+  {g:"su",n:"Pareidolia",d:600,s:"See patterns in random things",t:"hard"},
+  {g:"su",n:"Acquiescence",d:600,s:"Agree to the terms",t:"hard"},
+  {g:"su",n:"Lorem Ipsum",d:600,s:"Read the lorem ipsum text",t:"hard"},
+  {g:"su",n:"brb",d:600,s:"Go AFK for 5 minutes",t:"hard"},
+  {g:"su",n:"Comeuppance",d:650,s:"Get revenge on someone",t:"hard"},
+  {g:"su",n:"Locke & Key",d:650,s:"Find the hidden key",t:"hard"},
+  {g:"su",n:"Soothing Keys",d:650,s:"Play the piano keys",t:"hard"},
+  {g:"su",n:"Aim Demon",d:650,s:"Hit all targets perfectly",t:"hard"},
+  {g:"su",n:"Clone Wars",d:650,s:"Clone yourself",t:"hard"},
+  {g:"su",n:"The Beginning",d:650,s:"Return to the starting area",t:"hard"},
+  {g:"su",n:"6 Times 2",d:700,s:"Solve the math puzzle: 6x2 = 12",t:"hard"},
+  {g:"su",n:"Call of the Void",d:700,s:"Jump into the void intentionally",t:"hard"},
+  {g:"su",n:"Titan Attack",d:700,s:"Defeat the titan boss",t:"hard"},
+  {g:"su",n:"Nacht der Untoten",d:700,s:"Survive the night",t:"hard"},
+  {g:"su",n:"Eyemageddon",d:700,s:"Find all hidden eyes",t:"hard"},
+  {g:"su",n:"Subliminal Messaging",d:700,s:"Read the hidden subliminal message",t:"hard"},
+  {g:"su",n:"Remote Viewing",d:750,s:"View something from far away",t:"hard"},
+  {g:"su",n:"Compact Contour",d:750,s:"Trace the shape outline",t:"hard"},
+  {g:"su",n:"Long Live The King!",d:750,s:"Find the king NPC",t:"hard"},
+  {g:"su",n:"Debugge/r",d:750,s:"Find the debug room",t:"hard"},
+  {g:"su",n:"Straight and Narrow",d:750,s:"Walk the narrow path without falling",t:"hard"},
+  {g:"su",n:"Theory of Relativity",d:777,s:"Set system time to UTC+5 to match the glass clock",t:"hard"},
+  {g:"su",n:"Post-Mortem",d:800,s:"Die and come back to life",t:"hard"},
+  {g:"su",n:"Freudian Slip",d:800,s:"Make a deliberate mistake",t:"hard"},
+  {g:"su",n:"Ultrastar",d:800,s:"Collect 10000 stars",t:"hard"},
+  {g:"su",n:"Hoarder",d:800,s:"Collect every item in the game",t:"hard"},
+  {g:"su",n:"TALKE",d:800,s:"Talk to the specific NPC",t:"hard"},
+  {g:"su",n:"Taking Inventory",d:850,s:"Solve chest lootseed puzzle (Minecraft mechanics)",t:"hard"},
+  {g:"su",n:"Random Number Generator",d:850,s:"Generate a specific random number",t:"hard"},
+  {g:"su",n:"Back For More",d:850,s:"Return to a previously found secret",t:"hard"},
+  {g:"su",n:"Slippery Slope",d:850,s:"Slide down the slope",t:"hard"},
+  {g:"su",n:"Guest",d:850,s:"Be in a guest state",t:"hard"},
+  {g:"su",n:"Eye of the Beholder",d:900,s:"Look at the eye from the right angle",t:"legendary"},
+  {g:"su",n:"Sharpshooter",d:900,s:"Hit the target 10 times in a row",t:"legendary"},
+  {g:"su",n:"Fabled",d:900,s:"Find the hidden fable",t:"legendary"},
+  {g:"su",n:"Saper",d:900,s:"Solve the maze puzzle",t:"legendary"},
+  {g:"su",n:"Identity Fraud",d:900,s:"Take MrCollisionGroup's identity (binary code EOOR53141)",t:"legendary"},
+  {g:"su",n:"Transliteration",d:900,s:"Decode the transliterated message",t:"legendary"},
+  {g:"su",n:"Under the Veil",d:909,s:"Look under the veil",t:"legendary"},
+  {g:"su",n:"Ultrafuchsia",d:912,s:"Find the ultrafuchsia color",t:"legendary"},
+  {g:"su",n:"Historian",d:920,s:"Read all books in the game",t:"legendary"},
+  {g:"su",n:"Event Horizon",d:920,s:"Cross the event horizon",t:"legendary"},
+  {g:"su",n:"StudReviewer",d:935,s:"Review all the studs",t:"legendary"},
+  {g:"su",n:"Spawn Shark",d:939,s:"Click the spawn point the number of times shown on the statue",t:"legendary"},
+  {g:"su",n:"Secret Multiverse",d:942,s:"Complete the entire Secret Multiverse questline (ACBAS, TOSG, AGOS)",t:"legendary"},
+  {g:"su",n:"Close Quarters",d:950,s:"Get extremely close to the object",t:"legendary"},
+  {g:"su",n:"Hackerman",d:950,s:"Hack the in-game terminal",t:"legendary"},
+  {g:"su",n:"Fuchsia",d:950,s:"Find the fuchsia hidden area",t:"legendary"},
+  {g:"su",n:"Cognitohazard",d:975,s:"Look at the cognitohazard image",t:"legendary"},
+  {g:"su",n:"Agent Orange",d:980,s:"Find agent orange",t:"legendary"},
+  {g:"su",n:"Meet The Owner!",d:991,s:"Find and meet the game owner",t:"legendary"},
+  {g:"su",n:"Double Jeopardy",d:992,s:"Complete double jeopardy challenge",t:"legendary"},
+  {g:"su",n:"Where's Waldo!",d:999,s:"Find Waldo hidden in the map",t:"legendary"},
+  {g:"su",n:"3600",d:950,s:"Wait exactly 3600 seconds (1 hour)",t:"legendary"},
+  {g:"su",n:"Puthing Around",d:1000,s:"Input THROZYCKD at Paths structure + solve Anti-Chud dictionary word",t:"legendary"},
+  {g:"su",n:"M-Theory",d:1000,s:"Unknown - the hardest secret, only 1 person has it",t:"legendary"},
 
-    // Asset search state
-    let assetPage = 1;
-    let assetNextCursor = null;
-    let assetCursorHistory = [null]; // index i = cursor to use to get page i+1 (null = start)
-    let assetSelectedItem = null;
+  // Easiest Game on Roblox
+  {g:"ego",n:"Victory",d:0,s:"Complete the basic objectives - reach the end",t:"easy"},
+  {g:"ego",n:"Cheese",d:0,s:"Push the yellow Cheese Ball off the edge",t:"easy"},
+  {g:"ego",n:"Fell",d:0,s:"Fall off the map yourself",t:"easy"},
+  {g:"ego",n:"Lightning Strike",d:0,s:"Copy what the Cheese Ball says in chat until lightning strikes you",t:"medium"},
+  {g:"ego",n:"The Mine",d:0,s:"Push Cheese Ball from spawn to the wall past the trophy to reveal invisible path to The Mine",t:"medium"},
+  {g:"ego",n:"Upside Down",d:0,s:"Find a way to flip upside down",t:"medium"},
+  {g:"ego",n:"Color Change",d:0,s:"Change your character's color",t:"medium"},
+  {g:"ego",n:"Speed Run",d:0,s:"Complete the game in under 10 seconds",t:"medium"},
+  {g:"ego",n:"Maze",d:0,s:"Find and solve the hidden maze",t:"medium"},
+  {g:"ego",n:"Collection",d:0,s:"Collect all items on the map",t:"medium"},
+  {g:"ego",n:"Invisible Path",d:0,s:"Walk on the invisible path",t:"medium"},
+  {g:"ego",n:"No Jump",d:0,s:"Complete the game without jumping",t:"hard"},
+  {g:"ego",n:"Reverse",d:0,s:"Do everything in reverse order",t:"hard"},
+  {g:"ego",n:"Secret Room",d:0,s:"Find the hidden room behind the wall",t:"hard"},
+  {g:"ego",n:"Tiny",d:0,s:"Shrink yourself to tiny size",t:"hard"},
+  {g:"ego",n:"Giant",d:0,s:"Grow yourself to giant size",t:"hard"},
+  {g:"ego",n:"Invisible",d:0,s:"Make yourself invisible",t:"hard"},
+  {g:"ego",n:"Teleport",d:0,s:"Find the teleporter to skip ahead",t:"hard"},
+  {g:"ego",n:"Puzzle",d:0,s:"Solve the hidden puzzle",t:"hard"},
+  {g:"ego",n:"Timer",d:0,s:"Beat the hidden timer challenge",t:"hard"},
+  {g:"ego",n:"Time Travel",d:0,s:"Find and use the time machine",t:"hard"},
+  {g:"ego",n:"Matrix",d:0,s:"Enter the Matrix by finding the green code",t:"hard"},
+  {g:"ego",n:"Stealth",d:0,s:"Sneak past the guards without being seen",t:"hard"},
+  {g:"ego",n:"Flying",d:0,s:"Discover how to fly",t:"very_hard"},
+  {g:"ego",n:"Shape Shift",d:0,s:"Shift your character shape",t:"very_hard"},
+  {g:"ego",n:"Dimension Shift",d:0,s:"Shift to another dimension",t:"very_hard"},
+  {g:"ego",n:"Hidden",d:0,s:"Find all hidden objects scattered around",t:"very_hard"},
+  {g:"ego",n:"Challenge",d:0,s:"Complete the secret challenge mode",t:"very_hard"},
+  {g:"ego",n:"Boss Fight",d:0,s:"Find and defeat the secret boss",t:"very_hard"},
+  {g:"ego",n:"Secret Ending",d:0,s:"Unlock the ultimate secret ending (rarest)",t:"extreme"},
 
-    // ── ASSET TYPE → Toolbox searchCategoryType mapping ──
-    // Roblox Toolbox API v2 uses these exact string values for searchCategoryType
-    const assetTypeMap = {
-        "Animation":  "Animation",
-        "Audio":      "Audio",
-        "Decal":      "Decal",
-        "MeshPart":   "MeshPart",
-        "Model":      "Model",
-        "Plugin":     "Plugin"
-    };
+  // Tycoon Secrets
+  {g:"ts",n:"Happy Rock",d:0,s:"Click the happy rock near the spawn area",t:"easy"},
+  {g:"ts",n:"Noob",d:0,s:"Find and click the noob NPC",t:"easy"},
+  {g:"ts",n:"Spawn Item",d:0,s:"Click on the spawn point",t:"easy"},
+  {g:"ts",n:"Click Clack",d:0,s:"Click the clack button",t:"easy"},
+  {g:"ts",n:"Apple",d:0,s:"Find the hidden apple",t:"easy"},
+  {g:"ts",n:"Blue Button",d:0,s:"Click the blue button on your tycoon",t:"easy"},
+  {g:"ts",n:"Boombox",d:0,s:"Find the boombox item",t:"easy"},
+  {g:"ts",n:"Counting",d:0,s:"Count the objects correctly",t:"medium"},
+  {g:"ts",n:"Puths",d:0,s:"Find the puths",t:"medium"},
+  {g:"ts",n:"Empyreus",d:0,s:"Reach the Empyreus area",t:"medium"},
+  {g:"ts",n:"Raining",d:0,s:"Drop the tix under the X under the clouds",t:"medium"},
+  {g:"ts",n:"Sacrifice",d:0,s:"Sacrifice the Tix to the Giant Yellow Ball",t:"medium"},
+  {g:"ts",n:"Sparkle",d:0,s:"Click the hidden button on the Golden Tree",t:"medium"},
+  {g:"ts",n:"Strawberry Upgrader",d:0,s:"Say 'saja boys' to the Boombox",t:"medium"},
+  {g:"ts",n:"Green Button",d:0,s:"Solve the Green Button puzzle code (no spaces!)",t:"medium"},
+  {g:"ts",n:"Greenhouse",d:0,s:"Find the Greenhouse area",t:"medium"},
+  {g:"ts",n:"Magnifying Glass",d:0,s:"Find the Magnifying Glass item",t:"medium"},
+  {g:"ts",n:"Giant Yellow Ball",d:0,s:"Find the Giant Yellow Ball",t:"medium"},
+  {g:"ts",n:"Elevator",d:0,s:"Find and use the elevator",t:"medium"},
+  {g:"ts",n:"THE DEPTHS",d:0,s:"Complete invisible part obby on the hill, enter cave, wait for elevator",t:"hard"},
+  {g:"ts",n:"Thief",d:0,s:"Chat a contributor's Roblox player ID number",t:"hard"},
+  {g:"ts",n:"UFO",d:0,s:"Go to texture puzzle and type '4LI3NS RUL3' then Enter",t:"hard"},
+  {g:"ts",n:"Writer",d:0,s:"Use Magnifying Glass on Crossroads map, find numbers in the sky, click books in that order",t:"hard"},
+  {g:"ts",n:"LIVE!",d:0,s:"Sit in chair in ABOVE Realm for exactly 42 seconds, then jump at exactly 42s",t:"hard"},
+  {g:"ts",n:"Stacked",d:0,s:"Put all 3 color balls in different corners, then stand in the empty corner",t:"hard"},
+  {g:"ts",n:"Bill Cipher",d:0,s:"Solve the Bill Cipher color cipher in the TV",t:"hard"},
+  {g:"ts",n:"Contributors Board",d:0,s:"Find all contributors listed on the board",t:"hard"},
+  {g:"ts",n:"Golden Tree",d:0,s:"Find the Golden Tree",t:"hard"},
+  {g:"ts",n:"Texture Puzzle",d:0,s:"Solve the texture puzzle",t:"hard"},
+  {g:"ts",n:"Invisible Obby",d:0,s:"Complete the invisible obby course",t:"very_hard"},
+];
 
-    // Thumbnail icon fallbacks per type
-    const typeIcon = {
-        "Animation": "🎞️", "Audio": "🔊", "Decal": "🖼️",
-        "MeshPart": "🧱", "Model": "📦", "Plugin": "🔌"
-    };
+let currentGame = 'all';
+let currentAIImage = null;
 
-    async function searchAssets(page) {
-        const query = document.getElementById('assetQueryInput').value.trim();
-        const typeKey = document.getElementById('assetTypeSelect').value;
-        const catType = assetTypeMap[typeKey] || "MeshPart";
+// ===== TAB SYSTEM =====
+document.querySelectorAll('.tabs .tab[data-tab]').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tabs .tab[data-tab]').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + t.dataset.tab).classList.add('active');
+  });
+});
 
-        if (!query) { alert("Please enter a search keyword."); return; }
+// ===== UTILITIES =====
+function $(id){return document.getElementById(id)}
+function out(id,text,err){const e=$(id);e.textContent=text;e.className=err?'output error':'output';}
+function toast(msg){const d=document.createElement('div');d.className='toast';d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),2000);}
+function copyText(t){navigator.clipboard.writeText(t).then(()=>toast('Copied!')).catch(()=>{const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Copied!');});}
 
-        const resultsPanel = document.getElementById('assetResults');
-        const statusEl     = document.getElementById('assetStatus');
-        const listEl       = document.getElementById('assetResultsList');
-        const detailEl     = document.getElementById('assetDetail');
-        const pagEl        = document.getElementById('assetPagination');
+// ===== CIPHER DECODERS =====
+function decodeBinary(){
+  let s=$('binaryInput').value.replace(/\s/g,'');
+  if(!s.match(/^[01]+$/)) return out('binaryOutput','Invalid binary input',true);
+  while(s.length%8) s='0'+s;
+  let r='';for(let i=0;i<s.length;i+=8)r+=String.fromCharCode(parseInt(s.substr(i,8),2));
+  out('binaryOutput','Decoded: '+r+'\nHex: '+r.split('').map(c=>c.charCodeAt(0).toString(16).toUpperCase().padStart(2,'0')).join(' '));
+}
+function encodeBinary(){
+  const s=$('binaryInput').value;
+  out('binaryOutput',s.split('').map(c=>c.charCodeAt(0).toString(2).padStart(8,'0')).join(' '));
+}
+function decodeCaesar(){
+  const s=$('caesarInput').value;const sh=parseInt($('caesarShift').value)||13;
+  let r='';for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)c=(c-65-sh)%26+65;else if(c>=97&&c<=122)c=(c-97-sh)%26+97;r+=String.fromCharCode(c);}
+  out('caesarOutput','Shift '+sh+': '+r);
+}
+function encodeCaesar(){
+  const s=$('caesarInput').value;const sh=parseInt($('caesarShift').value)||13;
+  let r='';for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)c=(c-65+sh)%26+65;else if(c>=97&&c<=122)c=(c-97+sh)%26+97;r+=String.fromCharCode(c);}
+  out('caesarOutput','Encoded (shift '+sh+'): '+r);
+}
+function bruteForceCaesar(){
+  const s=$('caesarInput').value;let r='';
+  for(let sh=1;sh<=25;sh++){let d='';for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)c=(c-65-sh)%26+65;else if(c>=97&&c<=122)c=(c-97-sh)%26+97;d+=String.fromCharCode(c);}r+='Shift '+String(sh).padStart(2)+': '+d+'\n';}
+  out('caesarOutput',r);
+}
+function decodeBase64(){
+  try{const r=atob($('base64Input').value);out('base64Output','Decoded: '+r+'\nHex: '+r.split('').map(c=>c.charCodeAt(0).toString(16).toUpperCase().padStart(2,'0')).join(' '));}catch(e){out('base64Output','Invalid Base64',true);}
+}
+function encodeBase64(){out('base64Output','Encoded: '+btoa($('base64Input').value));}
+function decodeHex(){
+  let s=$('hexInput').value.replace(/\s/g,'');
+  if(!s.match(/^[0-9A-Fa-f]+$/))return out('hexOutput','Invalid hex',true);
+  if(s.length%2)s='0'+s;
+  let r='';for(let i=0;i<s.length;i+=2)r+=String.fromCharCode(parseInt(s.substr(i,2),16));
+  out('hexOutput','Decoded: '+r+'\nDecimal: '+r.split('').map(c=>c.charCodeAt(0)).join(', '));
+}
+function encodeHex(){out('hexOutput',$('hexInput').value.split('').map(c=>c.charCodeAt(0).toString(16).toUpperCase().padStart(2,'0')).join(' '));}
+function decodeAtbash(){
+  const s=$('atbashInput').value;let r='';
+  for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)r+=String.fromCharCode(90-(c-65));else if(c>=97&&c<=122)r+=String.fromCharCode(122-(c-97));else r+=s[i];}
+  out('atbashOutput','Decoded: '+r);
+}
+function decodeVigenere(){
+  const s=$('vigenereInput').value;const k=$('vigenereKey').value;if(!k)return out('vigenereOutput','Enter a key',true);
+  let r='',ki=0;
+  for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);let shift=k.charCodeAt(ki%k.length)-(k.charCodeAt(ki%k.length)>=97?97:65);
+  if(c>=65&&c<=90){r+=String.fromCharCode((c-65-shift+26)%26+65);ki++;}else if(c>=97&&c<=122){r+=String.fromCharCode((c-97-shift+26)%26+97);ki++;}else r+=s[i];}
+  out('vigenereOutput','Decoded: '+r);
+}
 
-        resultsPanel.style.display = 'block';
-        detailEl.style.display = 'none';
-        assetSelectedItem = null;
-        listEl.innerHTML = '';
-        statusEl.style.display = 'block';
-        statusEl.innerHTML = '<span style="color:var(--accent);">Searching…</span>';
-        pagEl.style.display = 'none';
+// ===== PUZZLE SOLVERS =====
+function solveSequence(){
+  const nums=$('seqInput').value.split(/[,\s]+/).map(Number).filter(n=>!isNaN(n));
+  if(nums.length<2)return out('seqOutput','Enter at least 2 numbers',true);
+  let r='Input: ['+nums.join(', ')+']\n\n';
 
-        // Build URL
-        // Cursor-based pagination: page 1 → no cursor, subsequent pages → cursor from previous response
-        let url = `https://apis.roblox.com/toolbox-service/v2/assets?searchCategoryType=${catType}&Query=${encodeURIComponent(query)}&limit=20`;
+  // Arithmetic
+  if(nums.length>=2){
+    const d=nums[1]-nums[0];let ok=true;
+    for(let i=2;i<nums.length;i++){if(nums[i]-nums[i-1]!==d){ok=false;break;}}
+    if(ok)r+='✅ Arithmetic sequence!\n   Formula: a(n) = '+nums[0]+' + '+d+' × (n-1)\n   Next number: '+(nums[nums.length-1]+d)+'\n\n';
+  }
+  // Geometric
+  if(nums.length>=2&&nums[0]!==0){
+    const ratio=nums[1]/nums[0];let ok=true;
+    for(let i=2;i<nums.length;i++){if(Math.abs(nums[i]/nums[i-1]-ratio)>1e-10){ok=false;break;}}
+    if(ok)r+='✅ Geometric sequence!\n   Formula: a(n) = '+nums[0]+' × '+ratio+'^(n-1)\n   Next number: '+(nums[nums.length-1]*ratio)+'\n\n';
+  }
+  // Fibonacci
+  if(nums.length>=3){
+    let ok=true;for(let i=2;i<nums.length;i++){if(nums[i]!==nums[i-1]+nums[i-2]){ok=false;break;}}
+    if(ok)r+='✅ Fibonacci-like sequence!\n   Formula: a(n) = a(n-1) + a(n-2)\n   Next number: '+(nums[nums.length-1]+nums[nums.length-2])+'\n\n';
+  }
+  // Powers of 2
+  let isPow2=true;for(let i=0;i<nums.length;i++){if(nums[i]!==Math.pow(2,i)){isPow2=false;break;}}
+  if(isPow2)r+='✅ Powers of 2!\n   Formula: a(n) = 2^(n-1)\n   Next number: '+Math.pow(2,nums.length)+'\n\n';
 
-        // Manage cursor history
-        if (page === 1) {
-            assetCursorHistory = [null];
-            assetPage = 1;
-        } else if (page > assetPage) {
-            // Going forward
-            assetPage = page;
-        } else {
-            // Going backward
-            assetPage = page;
-        }
+  // Polynomial degree 2
+  if(nums.length>=3){
+    const d1=[];for(let i=1;i<nums.length;i++)d1.push(nums[i]-nums[i-1]);
+    const d2=[];for(let i=1;i<d1.length;i++)d2.push(d1[i]-d1[i-1]);
+    let ok=true;for(let i=1;i<d2.length;i++){if(Math.abs(d2[i]-d2[0])>1e-10){ok=false;break;}}
+    if(ok){const a=d2[0]/2;const b=d1[0]-3*a;const c=nums[0]-a-b;
+    r+='✅ Quadratic polynomial!\n   Formula: a(n) = '+a.toFixed(2)+'n² + '+b.toFixed(2)+'n + '+c.toFixed(2)+'\n   Next number: '+(a*Math.pow(nums.length+1,2)+b*(nums.length+1)+c).toFixed(2)+'\n\n';}
+  }
 
-        // The cursor for the requested page is at history[page-1]
-        const cursor = assetCursorHistory[assetPage - 1] ?? null;
-        if (cursor) url += `&Cursor=${encodeURIComponent(cursor)}`;
+  if(r==='Input: ['+nums.join(', ')+']\n\n')r+='No clear pattern found. Try AI analysis for complex sequences.';
+  out('seqOutput',r);
+}
+function factorPrime(){
+  let n=parseInt($('primeInput').value);if(!n||n<2)return out('primeOutput','Enter a number >= 2',true);
+  const orig=n;const f=[];let d=2;
+  while(n>1){while(n%d===0){f.push(d);n/=d;}d++;if(d*d>n&&n>1){f.push(n;break;}}
+  const grouped={};f.forEach(x=>grouped[x]=(grouped[x]||0)+1);
+  out('primeOutput',orig+' = '+f.join(' × ')+'\nGrouped: '+Object.entries(grouped).map(([k,v])=>v>1?k+'^'+v:k).join(' × '));
+}
+function checkPrime(){
+  const n=parseInt($('primeInput').value);if(!n)return out('primeOutput','Enter a number',true);
+  if(n<=1)out('primeOutput',n+' is NOT prime');
+  else if(n<=3)out('primeOutput',n+' is prime');
+  else if(n%2===0||n%3===0)out('primeOutput',n+' is NOT prime');
+  else{let i=5;while(i*i<=n){if(n%i===0||n%(i+2)===0){out('primeOutput',n+' is NOT prime');return;}i+=6;}out('primeOutput',n+' is PRIME!');}
+}
+function solveEquation(){
+  const type=$('eqType').value;const a=parseFloat($('eqA').value);const b=parseFloat($('eqB').value);
+  if(type==='linear'){
+    if(a===0)out('eqOutput',b===0?'Infinite solutions':'No solution');
+    else out('eqOutput','x = '+(-b/a));
+  }else{
+    const c=parseFloat($('eqC').value);const disc=b*b-4*a*c;
+    if(disc>0)out('eqOutput','x1 = '+((-b+Math.sqrt(disc))/(2*a))+'\nx2 = '+((-b-Math.sqrt(disc))/(2*a)));
+    else if(disc===0)out('eqOutput','x = '+(-b/(2*a))+' (double root)');
+    else out('eqOutput','x1 = '+(-b/(2*a))+' + '+((Math.sqrt(-disc))/(2*a))+'i\nx2 = '+(-b/(2*a))+' - '+((Math.sqrt(-disc))/(2*a))+'i\n(Complex roots)');
+  }
+}
+function updateEqFields(){
+  $('eqCWrap').style.display=$('eqType').value==='quadratic'?'block':'none';
+}
+function calcGCD(){
+  let a=parseInt($('gcdA').value),b=parseInt($('gcdB').value);if(isNaN(a)||isNaN(b))return out('gcdOutput','Enter two numbers',true);
+  const orig=[a,b];while(b){[a,b]=[b,a%b];}out('gcdOutput','GCD('+orig.join(', ')+') = '+a);
+}
+function calcLCM(){
+  let a=parseInt($('gcdA').value),b=parseInt($('gcdB').value);if(isNaN(a)||isNaN(b))return out('gcdOutput','Enter two numbers',true);
+  const gcd=(x,y)=>y?gcd(y,x%y):x;const g=gcd(a,b);out('gcdOutput','LCM('+a+', '+b+') = '+(a*b/g));
+}
 
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+// Slider puzzle solver (BFS)
+function solveSlider(){
+  const nums=$('sliderInput').value.split(/[,\s]+/).map(Number).filter(n=>!isNaN(n));
+  const size=parseInt($('sliderSize').value);
+  if(nums.length!==size*size)return out('sliderOutput','Need '+(size*size)+' numbers for '+size+'x'+size+' grid',true);
+  const goal=[];for(let i=1;i<size*size;i++)goal.push(i);goal.push(0);
+  const key=s=>s.join(',');
+  const found={};found[key(nums)]=null;
+  const queue=[nums];
+  const dirs=[[-1,0,'Up'],[1,0,'Down'],[0,-1,'Left'],[0,1,'Right']];
+  let iterations=0;const maxIter=500000;
 
-            // Store next cursor for this page
-            const nextCursor = data.nextPageCursor || null;
-            assetCursorHistory[assetPage] = nextCursor; // cursor to use to fetch page assetPage+1
-
-            const items = data.data || [];
-            if (items.length === 0) {
-                statusEl.innerHTML = 'No results found.';
-                return;
-            }
-            statusEl.style.display = 'none';
-
-            listEl.innerHTML = '';
-            items.forEach(item => {
-                const asset = item.asset || item; // v2 wraps in .asset
-                const id = asset.id || asset.assetId || item.id;
-                const name = asset.name || item.name || "Unknown";
-                const creator = asset.creator?.name || asset.creatorName || item.creator?.name || "";
-                const thumbUrl = item.thumbnailUrl || `https://thumbnails.roproxy.com/v1/assets?assetIds=${id}&returnPolicy=PlaceHolder&size=150x150&format=Png&isCircular=false`;
-
-                const el = document.createElement('div');
-                el.className = 'asset-item';
-                el.dataset.id = id;
-                el.dataset.name = name;
-                el.dataset.creator = creator;
-                el.dataset.thumb = thumbUrl;
-                el.dataset.type = typeKey;
-
-                el.innerHTML = `
-                    <img class="asset-thumb" src="${thumbUrl}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" alt="">
-                    <div class="asset-thumb-placeholder" style="display:none;">${typeIcon[typeKey] || '📦'}</div>
-                    <div class="asset-info">
-                        <div class="asset-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-                        <div class="asset-id">ID: ${id}</div>
-                        <div class="asset-creator">${escapeHtml(creator)}</div>
-                    </div>
-                `;
-                el.onclick = () => selectAsset(el, id, name, creator, thumbUrl, typeKey);
-                listEl.appendChild(el);
-            });
-
-            // Pagination
-            pagEl.style.display = 'flex';
-            document.getElementById('assetPageInfo').innerText = `Page ${assetPage}`;
-            document.getElementById('assetPrevBtn').disabled = (assetPage <= 1);
-            document.getElementById('assetNextBtn').disabled = !nextCursor;
-
-        } catch(e) {
-            statusEl.style.display = 'block';
-            statusEl.innerHTML = `<span style="color:var(--danger);">Search failed: ${escapeHtml(e.message)}</span><br><span style="font-size:10px; color:#8b949e;">The Roblox Toolbox API may require authentication for some results. Try a different query or asset type.</span>`;
-        }
+  while(queue.length>0&&iterations<maxIter){
+    iterations++;const curr=queue.shift();
+    if(key(curr)===key(goal)){
+      const path=[];let s=curr;while(found[key(s)]!==null){const[prev,dir]=found[key(s)];path.unshift(dir);s=prev;}
+      out('sliderOutput','Solved in '+path.length+' moves!\n\n'+path.join(' → '));
+      return;
     }
-
-    function selectAsset(el, id, name, creator, thumbUrl, typeKey) {
-        // Deselect previous
-        document.querySelectorAll('.asset-item.selected').forEach(x => x.classList.remove('selected'));
-        el.classList.add('selected');
-        assetSelectedItem = { id, name, creator, thumbUrl, typeKey };
-
-        const detailEl = document.getElementById('assetDetail');
-        detailEl.style.display = 'block';
-
-        document.getElementById('assetDetailThumb').src = thumbUrl;
-        document.getElementById('assetDetailName').innerText = name;
-        document.getElementById('assetDetailMeta').innerText = `ID: ${id} · by ${creator || 'Unknown'}`;
-
-        // Build copy chips based on asset type
-        const grid = document.getElementById('assetCopyGrid');
-        grid.innerHTML = '';
-
-        const chips = buildCopyChips(id, typeKey);
-        chips.forEach(chip => {
-            const el = document.createElement('div');
-            el.className = 'copy-chip';
-            el.innerHTML = `${chip.label}<span>${chip.desc}</span>`;
-            el.onclick = () => copyAndFlash(el, chip.value);
-            grid.appendChild(el);
-        });
+    const ei=curr.indexOf(0);const er=Math.floor(ei/size);const ec=ei%size;
+    for(const[dr,dc,dir] of dirs){
+      const nr=er+dr,nc=ec+dc;if(nr<0||nr>=size||nc<0||nc>=size)continue;
+      const ni=nr*size+nc;const next=[...curr];[next[ei],next[ni]]=[next[ni],next[ei]];
+      const nk=key(next);if(!(nk in found)){found[nk]=[curr,dir];queue.push(next);}
     }
+  }
+  out('sliderOutput','No solution found (or too complex). Try the online solver link in Tools tab.');
+}
 
-    function buildCopyChips(id, typeKey) {
-        // Returns array of { label, desc, value } to show as copy buttons
-        const chips = [];
-        chips.push({ label: 'Copy Asset ID', desc: 'Raw numeric ID', value: String(id) });
+// Lights Out solver
+let lightsState=[];
+function buildLightsGrid(){
+  const size=parseInt($('lightsSize').value);
+  const grid=$('lightsGrid');grid.innerHTML='';grid.style.gridTemplateColumns='repeat('+size+',1fr)';
+  lightsState=new Array(size*size).fill(0);
+  for(let i=0;i<size*size;i++){
+    const cell=document.createElement('div');cell.className='lights-cell off';cell.dataset.i=i;
+    cell.onclick=()=>{lightsState[i]=1-lightsState[i];cell.className='lights-cell '+(lightsState[i]?'on':'off');$('lightsInput').value=lightsState.join(',');};
+    grid.appendChild(cell);
+  }
+}
+function solveLights(){
+  let nums;
+  if($('lightsInput').value.trim()){
+    nums=$('lightsInput').value.split(/[,\s]+/).map(Number).filter(n=>!isNaN(n));
+  }else{nums=lightsState;}
+  const size=parseInt($('lightsSize').value);
+  if(nums.length!==size*size)return out('lightsOutput','Need '+(size*size)+' numbers for '+size+'x'+size,true);
+  const n=size*size;
+  const matrix=Array.from({length:n},()=>new Array(n+1).fill(0));
+  for(let r=0;r<size;r++)for(let c=0;c<size;c++){
+    const pos=r*size+c;matrix[pos][pos]=1;
+    if(r>0)matrix[pos][pos-size]=1;if(r<size-1)matrix[pos][pos+size]=1;
+    if(c>0)matrix[pos][pos-1]=1;if(c<size-1)matrix[pos][pos+1]=1;
+    matrix[pos][n]=nums[pos];
+  }
+  for(let col=0;col<n;col++){
+    let pivot=-1;for(let row=col;row<n;row++){if(matrix[row][col]===1){pivot=row;break;}}
+    if(pivot===-1)continue;
+    [matrix[col],matrix[pivot]]=[matrix[pivot],matrix[col]];
+    for(let row=0;row<n;row++){if(row!==col&&matrix[row][col]===1)for(let j=0;j<=n;j++)matrix[row][j]=(matrix[row][j]+matrix[col][j])%2;}
+  }
+  const sol=matrix.map(r=>r[n]);const clicks=[];for(let i=0;i<n;i++)if(sol[i])clicks.push('Cell ('+Math.floor(i/size)+','+i%size+')');
+  out('lightsOutput','Click these '+clicks.length+' cells:\n'+clicks.join('\n'));
+}
 
-        if (typeKey === 'MeshPart' || typeKey === 'Model') {
-            chips.push({ label: 'Mesh ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
-            // For MeshPart: texture is often separate. Common pattern: id-1 for older assets, but not reliable.
-            // Best practice: show the asset ID and let user find texture in Studio.
-            chips.push({ label: 'TextureID?', desc: 'May need Studio', value: `rbxassetid://${id}` });
-        }
-        if (typeKey === 'Decal' || typeKey === 'Image') {
-            chips.push({ label: 'Decal ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
-            // Underlying image ID for Decal is typically ID+1 (upload quirk), but unreliable.
-            // We note this accurately.
-            chips.push({ label: 'Image ID', desc: 'rbxassetid://ID', value: `rbxassetid://${id}` });
-        }
-        if (typeKey === 'Audio') {
-            chips.push({ label: 'Sound ID', desc: 'For SFX block', value: String(id) });
-            chips.push({ label: 'rbxassetid', desc: 'Full URL form', value: `rbxassetid://${id}` });
-        }
-        if (typeKey === 'Animation') {
-            chips.push({ label: 'Anim ID', desc: 'For ANIM block', value: String(id) });
-            chips.push({ label: '[1, ID]', desc: 'ANIM_USE format', value: `[1,${id}]` });
-        }
-        if (typeKey === 'Plugin' || typeKey === 'Model') {
-            // Already covered above
-        }
+// ===== GAME DATABASE =====
+function renderSecrets(filter,search){
+  const list=$('secretList');list.innerHTML='';let count=0;
+  const q=(search||'').toLowerCase();
+  SECRETS_DB.forEach(s=>{
+    if(filter!=='all'&&s.g!==filter)return;
+    if(q&&!s.n.toLowerCase().includes(q)&&!s.s.toLowerCase().includes(q))return;
+    count++;
+    const div=document.createElement('div');div.className='secret-item';
+    div.onclick=()=>copyText(s.n+': '+s.s);
+    const chipClass='chip-'+s.t;
+    const gameLabel={su:'SU',ego:'EGO',ts:'TS'}[s.g];
+    div.innerHTML='<div class="name">'+s.n+'</div><div class="solution">'+s.s+'</div><div class="meta"><span class="chip '+chipClass+'">'+s.t+'</span><span class="chip" style="background:rgba(108,92,231,0.1);color:var(--accent2)">'+gameLabel+'</span>'+(s.d?'<span class="chip" style="background:rgba(255,255,255,0.05);color:var(--muted)">Dif: '+s.d+'</span>':'')+'</div>';
+    list.appendChild(div);
+  });
+  $('secretCount').textContent=count;
+}
+function filterGame(g){
+  currentGame=g;
+  document.querySelectorAll('#gameSelector .tab').forEach(t=>t.classList.toggle('active',t.dataset.game===g));
+  renderSecrets(g,$('secretSearch').value);
+}
+function searchSecrets(){renderSecrets(currentGame,$('secretSearch').value);}
 
-        return chips;
-    }
+// ===== TOOLS =====
+function convertBase(){
+  const v=$('baseInput').value.trim();const from=parseInt($('baseFrom').value);const to=parseInt($('baseTo').value);
+  const num=parseInt(v,from);if(isNaN(num))return out('baseOutput','Invalid number for base '+from,true);
+  out('baseOutput','Base '+from+': '+v+'\nBase '+to+': '+num.toString(to).toUpperCase()+'\nBase 10: '+num+'\nBase 2: '+num.toString(2)+'\nBase 16: '+num.toString(16).toUpperCase());
+}
+function showUTC(){const d=new Date();$('utcTime').textContent=d.toUTCString().split(' ')[4]+' UTC';}
+function genRandom(){
+  const min=parseInt($('randMin').value)||1;const max=parseInt($('randMax').value)||100;
+  $('randOutput').textContent=Math.floor(Math.random()*(max-min+1))+min;
+}
+function textStats(){
+  const t=$('textToolInput').value;
+  const words=t.trim()?t.trim().split(/\s+/).length:0;
+  out('textToolOutput','Characters: '+t.length+'\nWords: '+words+'\nLines: '+(t.split('\n').length)+'\nLetters: '+t.replace(/[^a-zA-Z]/g,'').length+'\nNumbers: '+t.replace(/[^0-9]/g,'').length);
+}
+function textReverse(){$('textToolOutput').textContent=$('textToolInput').value.split('').reverse().join('');}
+function textUpper(){$('textToolOutput').textContent=$('textToolInput').value.toUpperCase();}
+function textLower(){$('textToolOutput').textContent=$('textToolInput').value.toLowerCase();}
 
-    function copyAndFlash(el, value) {
-        navigator.clipboard.writeText(value).then(() => {}).catch(() => {
-            const t = document.createElement('textarea');
-            t.value = value; document.body.appendChild(t); t.select();
-            document.execCommand('copy'); document.body.removeChild(t);
-        });
-        el.classList.add('copied');
-        const orig = el.innerHTML;
-        el.innerHTML = `✓ Copied!<span>${escapeHtml(value.length > 20 ? value.slice(0,18)+'…' : value)}</span>`;
-        setTimeout(() => {
-            el.classList.remove('copied');
-            el.innerHTML = orig;
-        }, 1500);
-    }
+// ===== AUTO-DETECT =====
+function autoDetect(){
+  const s=$('autoInput').value.trim();if(!s)return out('autoOutput','Paste something to analyze',true);
+  let r='🔍 Analysis:\n\n';
+  if(s.match(/^[01\s]+$/)&&s.replace(/\s/g,'').length>1){
+    r+='Detected: BINARY\n';try{
+      let bin=s.replace(/\s/g,'');while(bin.length%8)bin='0'+bin;
+      let decoded='';for(let i=0;i<bin.length;i+=8)decoded+=String.fromCharCode(parseInt(bin.substr(i,8),2));
+      r+='Decoded: '+decoded+'\n';
+    }catch(e){r+='(decode failed)\n';}
+    r+='\n';
+  }
+  if(s.match(/^[0-9A-Fa-f\s]+$/)&&s.replace(/\s/g,'').length>=4&&s.replace(/\s/g,'').length%2===0){
+    r+='Detected: HEXADECIMAL\n';
+    let hex=s.replace(/\s/g,'');let decoded='';try{for(let i=0;i<hex.length;i+=2)decoded+=String.fromCharCode(parseInt(hex.substr(i,2),16));r+='Decoded: '+decoded+'\n';}catch(e){}
+    r+='\n';
+  }
+  if(s.match(/^[A-Za-z0-9+/=]+$/)&&s.length%4===0&&s.length>=4){
+    r+='Possible: BASE64\n';
+    try{r+='Decoded: '+atob(s)+'\n';}catch(e){r+='(not valid Base64)\n';}
+    r+='\n';
+  }
+  if(s.match(/^[A-Za-z\s]+$/)){
+    r+='Possible: CAESAR/ROT13 CIPHER\n';
+    let rot13='';for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)rot13+=String.fromCharCode((c-65+13)%26+65);else if(c>=97&&c<=122)rot13+=String.fromCharCode((c-97+13)%26+97);else rot13+=s[i];}
+    r+='ROT13: '+rot13+'\n';
+    // Show top 5 most likely shifts
+    const englishFreq=['e','t','a','o','i','n','s','h','r'];
+    r+='\nTop shifts:\n';
+    for(let sh=1;sh<=25;sh++){let d='';for(let i=0;i<s.length;i++){let c=s.charCodeAt(i);if(c>=65&&c<=90)d+=String.fromCharCode((c-65-sh+26)%26+65);else if(c>=97&&c<=122)d+=String.fromCharCode((c-97-sh+26)%26+97);else d+=s[i];}r+='  ROT'+sh+': '+d+'\n';}
+    r+='\n';
+  }
+  if(s.match(/^\d+$/)){
+    const n=parseInt(s);
+    r+='Detected: NUMBER\n';
+    r+='Prime factors: ';let num=n;const f=[];let d=2;while(num>1){while(num%d===0){f.push(d);num/=num/d|0?num/d:1;d++;}d++;if(d*d>num&&num>1){f.push(num;break;}}if(f.length)r+=f.join(' × ')+'\n';else r+='(prime)\n';
+    r+='Binary: '+n.toString(2)+'\n';
+    r+='Hex: '+n.toString(16).toUpperCase()+'\n';
+    r+='Octal: '+n.toString(8)+'\n';
+  }
+  out('autoOutput',r);
+}
 
-    // ── REST OF APP (unchanged) ──
+// ===== AI INTEGRATION =====
+function saveKey(){
+  const key=$('apiKey').value.trim();
+  if(key){localStorage.setItem('gemini_key',key);$('aiStatus').className='status-dot on';$('aiStatusText').textContent='API key saved locally';toast('Key saved!');}
+}
+function loadKey(){
+  const k=localStorage.getItem('gemini_key');
+  if(k){$('apiKey').value=k;$('aiStatus').className='status-dot on';$('aiStatusText').textContent='API key loaded';}
+}
+function clearAI(){$('aiPuzzleDesc').value='';$('previewImg').style.display='none';$('aiOutput').textContent='';currentAIImage=null;}
 
-    const library = {
-        "Combat": {
-            HITBOX: { SIZE: "10, 10, 10", DAMAGE: 10, STUN: 1, BLOCKABLE: true, POSITION: "0, 0, 4", HIT_RAGDOLL: true, ATTACK_TYPE: "Melee", CAN_KILL: true, STUN_ANIM: true, CLEAR_KNOCKBACK: false, CANCEL_ENEMY: true, "360_BLOCK": false, HIT_USER: false, BRANCH: "", BRANCH_TARGET: "" },
-            PROJECTILE: { DAMAGE: 10, SPEED: 100, SIZE: "12, 12, 12", POSITION: "0, 0, 0", ATTACK_TYPE: "Bullet", HIT_RAGDOLL: true, CAN_KILL: true, STUN: 1, TIME: 1, CANCEL_ENEMY: true, CLEAR_KNOCKBACK: false, "360_BLOCK": false, HIT_USER: false, PROJECTILE_TAG: "", BRANCH: "", BRANCH_TARGET: "", CONTINUE: false, FILTER_INTERVAL: 1, AIM_LAST_HIT: -1 },
-            COUNTER: { TIME: 0.5, STUN: 1, BRANCH: "hit", ATTACK_TYPE2: "Melee,Bullet,Swarm,Explosion,Domain", REMOVE_ON_HIT: true, CANCEL_ENEMY: true },
-            GRAB: { TIME: 1, BODY_PART: "HumanoidRootPart", BODY_PART2: "HumanoidRootPart", POSITION: "0, 0, 4", ROTATION: "0, 180, 0", LAST_HIT: 1 },
-            ULTGIB: { AMOUNT: 20 },
-            HPGIB: { AMOUNT: -15 },
-            HITCNCL: { BRANCH: "endlag", TIME: 1, ENDLAG: 1, FLIP: true }
-        },
-        "Logic": {
-            WAIT: { TIME: 0.2 },
-            TAG: { TAG: "marker", VALUE: "1", CHECK: false, SET: true, TIME: 1, BRANCH: "" },
-            BRANCH: { BRANCH: "1", RANDOM: "" },
-            STATE: { STATE: "Stun", TIME: 1, VALUE: 1, CANCEL_ON_END: false, LAST_HIT: -1 },
-            LOOP: { LOOP_BACK: 1, LOOP_AMOUNT: 5, HOLD: false },
-            SKILL: { MOVE: "Cancel", SPEED: 1, START: 0, ENABLE_VARIANTS: true, CANCEL_LAST: false, HOLD_FOR: 0 }
-        },
-        "Visual/Audio": {
-            ANIM: { ANIM_USE: "[1,1]", SPEED: 1, FADE_IN: 0.1, FADE_OUT: 0.2, LOOPED: false, PREVIEW: "[0,1]", LAST_HIT: -1 },
-            SFX: { ID: "0", VOLUME: 2, SPEED: 1, START: 0, CANCEL: false, END: 500, GLOBAL: false },
-            VISUAL: { EFFECT: "Glow", COLOR: "255, 255, 255", ALT_COLOR: "255, 255, 255", TIME: 0.5, POSITION: "0, 0, 0", ALT_POSITION: "0, 0, 0", SIZE: 1, ALT_SIZE: 1, OPACITY: 1, ALT_OPACITY: 0, ROTATION: "0, 0, 0", ALT_ROTATION: "0, 0, 0", EASING_STYLE: "Linear", EASING_DIRECTION: "In", BODY_PART: "HumanoidRootPart", AMOUNT: 1, LAST_HIT: -1, CANCEL_ON_INTERRUPT: false, TEXTURE: 0, RUN_ON_SERVER: false }
-        },
-        "Motion": {
-            VELO: { FORCE: "0, 0, 50", TIME: 0.2, FADE: true, TRACK: false, RAGDOLL: 0, TRUE_RAGDOLL: false, LAST_HIT: -1 }
-        }
-    };
+async function callGemini(prompt,imageBase64){
+  const key=$('apiKey').value.trim()||localStorage.getItem('gemini_key');
+  if(!key)throw new Error('No API key. Get a free key at aistudio.google.com');
+  const body={contents:[{parts:[{text:prompt}]}]};
+  if(imageBase64)body.contents[0].parts.push({inline_data:{mime_type:'image/png',data:imageBase64}});
+  const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+key,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+  });
+  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'API error '+res.status);}
+  const data=await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text||'No response from AI';
+}
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+async function analyzeWithAI(){
+  const desc=$('aiPuzzleDesc').value.trim();
+  if(!desc&&!currentAIImage)return out('aiOutput','Upload an image or describe the puzzle',true);
+  out('aiOutput','🤖 Analyzing with AI...');
+  try{
+    const sysPrompt=`You are an expert Roblox puzzle solver. You know everything about:
+- Secret Universe (all 127 secrets, ciphers, binary codes, Minecraft puzzles, time manipulation)
+- Easiest Game on Roblox (all 89 endings, Cheese Ball mechanics, hidden paths)
+- Tycoon Secrets (85+ secrets, Green Button codes, invisible obbies, chat commands)
+- General Roblox puzzles (sliding puzzles, lights out, number sequences, cipher codes)
+- Common ciphers: Binary, Caesar/ROT13, Base64, Hex, Atbash, Vigenere, Rail Fence
 
-    window.onload = () => {
-        loadAutoSave();
-        buildPalette();
-        if(moves.length === 0) addM('SKILL');
-        setInterval(autoSave, 30000);
-    };
+Analyze the puzzle described or shown and provide:
+1. What type of puzzle it is
+2. The solution or steps to solve it
+3. Any tips or tricks
+Be specific and give exact answers when possible.`;
+    const userMsg=desc||'Analyze this puzzle screenshot and tell me what it is and how to solve it.';
+    const result=await callGemini(sysPrompt+'\n\nUser puzzle: '+userMsg,currentAIImage);
+    out('aiOutput',result);
+  }catch(e){out('aiOutput','Error: '+e.message,true);}
+}
 
-    function buildPalette() {
-        const pal = document.getElementById('palette');
-        for(let cat in library) {
-            let l = document.createElement('div'); l.className = 'cat-label'; l.innerText = cat;
-            pal.appendChild(l);
-            let g = document.createElement('div'); g.style = 'display:grid; grid-template-columns: 1fr 1fr; gap:5px;';
-            for(let b in library[cat]) {
-                let btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = b;
-                btn.onclick = () => addBlock(b, library[cat][b]);
-                g.appendChild(btn);
-            }
-            pal.appendChild(g);
-        }
-    }
+async function chatWithAI(){
+  const msg=$('aiChatInput').value.trim();if(!msg)return out('aiChatOutput','Type a question',true);
+  out('aiChatOutput','🤖 Thinking...');
+  try{
+    const sysPrompt=`You are a Roblox puzzle expert assistant. Help with any puzzle, cipher, or game question. Be concise but thorough. If the user describes a code or cipher, try to decode it. If they mention a game, give specific solutions.`;
+    const result=await callGemini(sysPrompt+'\n\nUser: '+msg);
+    out('aiChatOutput',result);
+  }catch(e){out('aiChatOutput','Error: '+e.message,true);}
+}
 
-    function addM(t) {
-        moves.push({ NAME: "New " + t, K_NAME: t, KEY: 1, COOLDOWN: 0, DATA: { Line: [], Prop: { USE: true, AWK: true, NOCANCEL: false, NOSTUN: false, INV: false }, Req: [], Branch: {} } });
-        selectM(moves.length - 1);
-    }
+// File handling
+$('fileInput').addEventListener('change',function(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    const img=$('previewImg');img.src=ev.target.result;img.style.display='block';
+    const base64=ev.target.result.split(',')[1];currentAIImage=base64;
+    toast('Image loaded - tap Analyze');
+  };reader.readAsDataURL(file);
+});
+$('fileDrop').addEventListener('dragover',e=>{e.preventDefault();$('fileDrop').classList.add('drag');});
+$('fileDrop').addEventListener('dragleave',()=>$('fileDrop').classList.remove('drag'));
+$('fileDrop').addEventListener('drop',e=>{
+  e.preventDefault();$('fileDrop').classList.remove('drag');
+  const file=e.dataTransfer.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){const img=$('previewImg');img.src=ev.target.result;img.style.display='block';currentAIImage=ev.target.result.split(',')[1];};
+  reader.readAsDataURL(file);
+});
 
-    function selectM(i) { 
-        selM = i; 
-        expandedBlock = null; 
-        render(); 
-    }
-
-    function toggleBlock(bi) {
-        if (expandedBlock === bi) {
-            expandedBlock = null;
-        } else {
-            expandedBlock = bi;
-        }
-        render();
-    }
-
-    function addBlock(key, data) {
-        if(selM === null) return;
-        moves[selM].DATA.Line.push({ K_NAME: key, ...JSON.parse(JSON.stringify(data)) });
-        expandedBlock = moves[selM].DATA.Line.length - 1;
-        render();
-    }
-
-    function deleteMove(i) {
-        if(confirm("Delete this move?")) {
-            moves.splice(i, 1);
-            selM = null;
-            expandedBlock = null;
-            render();
-        }
-    }
-
-    function deleteBlock(bi, e) {
-        e.stopPropagation();
-        moves[selM].DATA.Line.splice(bi, 1);
-        if (expandedBlock === bi) expandedBlock = null;
-        render();
-    }
-
-    function clearWS() {
-        if(confirm("Clear entire workspace? Cannot undo.")) {
-            moves = [];
-            selM = null;
-            expandedBlock = null;
-            render();
-        }
-    }
-
-    function render() {
-        const ws = document.getElementById('ws');
-        if(moves.length === 0) {
-            ws.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:20px;">No moves yet. Add one from the sidebar.</p>';
-            renderInspector();
-            return;
-        }
-        
-        ws.innerHTML = moves.map((m, i) => `
-            <div class="move-card ${selM===i?'active':''}" onclick="selectM(${i})">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong style="color:var(--accent); font-size:15px;">${escapeHtml(m.NAME || 'Unnamed')}</strong>
-                    <span style="font-size:10px; opacity:0.6;">${m.K_NAME} | KEY: ${m.KEY || '-'}</span>
-                </div>
-                <div style="display:flex; gap:5px; margin-top:8px;">
-                    <span style="font-size:9px; color:#8b949e; flex:1;">${m.DATA.Line.length} block(s)</span>
-                    <span style="color:var(--danger); cursor:pointer; font-size:11px;" onclick="event.stopPropagation(); deleteMove(${i});" title="Delete move">✕ Delete</span>
-                </div>
-                <div style="margin-top: 10px;">
-                    ${m.DATA.Line.map((b, bi) => {
-                        const isExpanded = expandedBlock === bi && selM === i;
-                        return `
-                        <div class="block-row ${isExpanded ? 'expanded' : ''}">
-                            <div class="block-row-header" onclick="event.stopPropagation(); selM=${i}; toggleBlock(${bi});">
-                                <span><strong>${bi+1}.</strong> ${escapeHtml(b.K_NAME)}</span>
-                                <div>
-                                    <span style="font-size:10px; color:#8b949e; margin-right:8px;">${isExpanded ? '▼' : '▶'}</span>
-                                    <span style="color:var(--danger); cursor:pointer;" onclick="deleteBlock(${bi}, event)" title="Delete block">✕</span>
-                                </div>
-                            </div>
-                            <div class="block-settings">
-                                <div class="settings-grid">
-                                    ${Object.keys(b).filter(k => k !== 'K_NAME').map(k => {
-                                        const val = b[k];
-                                        const safeVal = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : String(val);
-                                        const safeValEsc = escapeHtml(safeVal);
-                                        
-                                        if(typeof val === 'boolean') {
-                                            return `
-                                                <label>${k.replace(/_/g, ' ')}</label>
-                                                <select onchange="upd(${bi}, '${k}', this.value === 'true')">
-                                                    <option value="true" ${val?'selected':''}>True</option>
-                                                    <option value="false" ${!val?'selected':''}>False</option>
-                                                </select>
-                                            `;
-                                        } else {
-                                            return `
-                                                <label>${k.replace(/_/g, ' ')}</label>
-                                                <input type="text" value="${safeValEsc}" onchange="upd(${bi}, '${k}', this.value)">
-                                            `;
-                                        }
-                                    }).join('')}
-                                </div>
-                            </div>
-                        </div>
-                    `}).join('')}
-                </div>
-            </div>
-        `).join('');
-        
-        renderInspector();
-    }
-
-    function renderInspector() {
-        const ins = document.getElementById('ins-content');
-        if (selM === null) {
-            ins.innerHTML = '<p style="text-align:center; color:#484f58; margin-top:40px;">Select a move in the workspace to edit its properties.</p>';
-            return;
-        }
-        const m = moves[selM];
-        ins.innerHTML = `
-            <label>Move Name</label>
-            <input value="${escapeHtml(m.NAME || '')}" onchange="moves[selM].NAME=this.value; render()">
-            
-            <label>Move Type (K_NAME)</label>
-            <select onchange="moves[selM].K_NAME=this.value; render()">
-                <option ${m.K_NAME=='SKILL'?'selected':''}>SKILL</option>
-                <option ${m.K_NAME=='MELEE'?'selected':''}>MELEE</option>
-                <option ${m.K_NAME=='CHASE'?'selected':''}>CHASE</option>
-                <option ${m.K_NAME=='ULTIMATE'?'selected':''}>ULTIMATE</option>
-                <option ${m.K_NAME=='SPECIAL'?'selected':''}>SPECIAL</option>
-                <option ${m.K_NAME=='AWAKENING'?'selected':''}>AWAKENING</option>
-            </select>
-            
-            <label>Cooldown</label>
-            <input type="number" value="${m.COOLDOWN || 0}" onchange="moves[selM].COOLDOWN=Number(this.value); render()">
-            
-            <label>Input Key (ID)</label>
-            <input type="number" value="${m.KEY || 1}" onchange="moves[selM].KEY=Number(this.value); render()">
-            
-            <hr style="border:0; border-top:1px solid var(--border); margin:15px 0;">
-            
-            <h4 style="margin:0 0 10px 0; color:var(--accent); font-size:12px;">Boolean Props</h4>
-            ${['USE', 'AWK', 'AWK2', 'NOCANCEL', 'NOSTUN', 'INV'].map(prop => `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                    <label style="margin:0;">${prop}</label>
-                    <select style="width:60px; padding:4px; margin:0;" onchange="updateProp('${prop}', this.value === 'true')">
-                        <option value="true" ${(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>True</option>
-                        <option value="false" ${!(m.DATA.Prop && m.DATA.Prop[prop])?'selected':''}>False</option>
-                    </select>
-                </div>
-            `).join('')}
-        `;
-    }
-
-    function updateProp(prop, val) {
-        if (!moves[selM].DATA.Prop) moves[selM].DATA.Prop = {};
-        moves[selM].DATA.Prop[prop] = val;
-    }
-
-    function upd(bi, k, v) {
-        let val = v;
-        if (typeof v !== 'boolean') {
-            try {
-                if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
-                    val = JSON.parse(v);
-                } else if (!isNaN(v) && v.trim() !== "") {
-                    val = Number(v);
-                }
-            } catch(e) {}
-        }
-        moves[selM].DATA.Line[bi][k] = val;
-    }
-
-    async function exportZ() {
-        if(!window.zstdEngine) {
-            alert("Zstd not ready. Please wait for the ZSTD READY status.");
-            return;
-        }
-        const raw = JSON.stringify(moves.map(m => ({ ...m, DATA: JSON.stringify(m.DATA) })));
-        try {
-            const uint8 = new TextEncoder().encode(raw);
-            const compressed = window.zstdEngine.compress(uint8);
-            let bin = '';
-            for (let i = 0; i < compressed.length; i++) bin += String.fromCharCode(compressed[i]);
-            const b64 = btoa(bin);
-            navigator.clipboard.writeText(b64).then(() => {
-                alert("✓ Zstd string copied to clipboard!");
-            }).catch(() => {
-                const t = document.createElement('textarea');
-                t.value = b64; document.body.appendChild(t); t.select();
-                document.execCommand('copy'); document.body.removeChild(t);
-                alert("✓ Zstd string copied to clipboard!");
-            });
-        } catch(e) { alert("Export Error: " + e.message); }
-    }
-
-    function importZ() {
-        const s = prompt("Paste your Zstd data:");
-        if(!s || !window.zstdEngine) return;
-        try {
-            const bin = atob(s);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            const decoded = new TextDecoder().decode(window.zstdEngine.decompress(bytes));
-            moves = JSON.parse(decoded).map(m => ({ ...m, DATA: JSON.parse(m.DATA) }));
-            selM = null;
-            expandedBlock = null;
-            render();
-            alert("✓ Moveset imported successfully!");
-        } catch(e) { alert("Import failed. Check that the Zstd string is valid.\n" + e.message); }
-    }
-
-    function autoSave() {
-        try { localStorage.setItem('moveset_autosave', JSON.stringify(moves)); } catch(e) {}
-    }
-
-    function loadAutoSave() {
-        try {
-            const saved = localStorage.getItem('moveset_autosave');
-            if(saved) moves = JSON.parse(saved);
-        } catch(e) {}
-    }
+// ===== INIT =====
+loadKey();renderSecrets('all','');buildLightsGrid();showUTC();setInterval(showUTC,1000);
+updateEqFields();
 </script>
 </body>
 </html>
